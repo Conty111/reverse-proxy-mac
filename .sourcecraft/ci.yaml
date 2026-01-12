@@ -1,0 +1,27 @@
+on:
+  push:
+    - workflows: build-workflow 
+      filter: 
+        branches: ["main"]
+
+workflows:
+  build-workflow:
+    tasks:
+      - build-task
+
+tasks:
+  - name: build-task
+    env:
+        IMAGE_URI: dockerhub_account/hello-world
+    cubes:
+      - name: docker-build
+        script:
+          - docker build . --file Dockerfile --tag $IMAGE_URI:$(date +%s)
+      # Опционально: Нужен Docker Hub account либо другой Docker Registry. Как настроить Yandex Cloud Container Registry см пример в документации.
+      # - name: push-dockerhub
+      #   env:
+      #     USER: ${{ secrets.user }}
+      #     PAT: ${{ secrets.PAT }}
+      #   script:
+      #     - echo $PAT | docker login --username $USER --password-stdin
+      #     - docker push $IMAGE_URI
