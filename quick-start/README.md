@@ -11,7 +11,7 @@ Requirements:
 go mod tidy
 ```
 ```bash
-env GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o my-plugin.wasm main.go
+env GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o filter.wasm main.go
 ```
 ```bash
 docker-compose -f demo-compose.yaml up
