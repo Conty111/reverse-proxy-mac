@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+*.md
+README.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+authserver
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+coverage.out
+coverage.html
+
+# Docker
+Dockerfile
+docker-compose.yaml
+.dockerignore
+
+# Misc
+.DS_Store
+*.log
+tmp/
+temp/
+
+# Envoy config (not needed in auth service container)
+envoy.yaml
+mac-filter.wasm
+krb5.keytab
+
+# Source craft
+.sourcecraft/

@@ -11,6 +11,16 @@ static_resources:
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
           stat_prefix: ingress_http
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: backend
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: backend_service
           http_filters:
           - name: envoy.filters.http.ext_authz
             typed_config:
@@ -35,5 +45,18 @@ static_resources:
         - endpoint:
             address:
               socket_address:
-                address: reverse-proxy-mac
+                address: mac-authserver
                 port_value: 9001
+  
+  - name: backend_service
+    type: STRICT_DNS
+    connect_timeout: 1s
+    load_assignment:
+      cluster_name: backend_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: httpbin.org
+                port_value: 80

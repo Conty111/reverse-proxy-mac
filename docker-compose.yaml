@@ -1,12 +1,44 @@
 version: '3.8'
+
 services:
+  mac-authserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mac-authserver
+    hostname: mac-authserver
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./config.json:/app/config.json:ro
+    environment:
+      - CONFIG_PATH=/app/config.json
+    networks:
+      - proxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9001"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   envoy:
     image: envoyproxy/envoy:v1.36.4
+    container_name: envoy-proxy
     volumes:
-      - ./envoy.yaml:/etc/envoy/envoy.yaml
-      - ./mac-filter.wasm:/etc/envoy/mac-filter.wasm
-      - ./krb5.keytab:/etc/krb5.keytab
+      - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
     ports:
-      - "10000:10000"
+      - "8080:8080"
       - "9901:9901"
-    command: ["-c", "/etc/envoy/envoy.yaml"]
+    command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+    networks:
+      - proxy-network
+    depends_on:
+      mac-authserver:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  proxy-network:
+    driver: bridge
