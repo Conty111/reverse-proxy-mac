@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 
+	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	envoy_type "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"google.golang.org/genproto/googleapis/rpc/status"
@@ -85,14 +86,32 @@ func (s *AuthServiceV3) convertToAuthRequest(req *envoy_auth.CheckRequest) *auth
 
 func (s *AuthServiceV3) convertToEnvoyResponse(authResp *auth.AuthResponse) *envoy_auth.CheckResponse {
 	if authResp.Decision == auth.DecisionAllow {
+		// Build response headers if any
+		var headers []*envoy_core.HeaderValueOption
+		for k, v := range authResp.Headers {
+			headers = append(headers, &envoy_core.HeaderValueOption{
+				Header: &envoy_core.HeaderValue{
+					Key:   k,
+					Value: v,
+				},
+			})
+		}
+
 		return &envoy_auth.CheckResponse{
 			Status: &status.Status{
 				Code: int32(codes.OK),
 			},
 			HttpResponse: &envoy_auth.CheckResponse_OkResponse{
-				OkResponse: &envoy_auth.OkHttpResponse{},
+				OkResponse: &envoy_auth.OkHttpResponse{
+					Headers: headers,
+				},
 			},
 		}
+	}
+
+	// Handle redirect (302) separately
+	if authResp.DeniedStatus == 302 {
+		return s.createRedirectResponse(authResp.Headers["Location"], authResp.DeniedMessage)
 	}
 
 	return s.createDeniedResponse(codes.PermissionDenied, authResp.DeniedMessage)
@@ -110,6 +129,33 @@ func (s *AuthServiceV3) createDeniedResponse(code codes.Code, message string) *e
 					Code: envoy_type.StatusCode_Forbidden,
 				},
 				Body: message,
+			},
+		},
+	}
+}
+
+func (s *AuthServiceV3) createRedirectResponse(location string, message string) *envoy_auth.CheckResponse {
+	headers := []*envoy_core.HeaderValueOption{
+		{
+			Header: &envoy_core.HeaderValue{
+				Key:   "Location",
+				Value: location,
+			},
+		},
+	}
+
+	return &envoy_auth.CheckResponse{
+		Status: &status.Status{
+			Code:    int32(codes.Unauthenticated),
+			Message: message,
+		},
+		HttpResponse: &envoy_auth.CheckResponse_DeniedResponse{
+			DeniedResponse: &envoy_auth.DeniedHttpResponse{
+				Status: &envoy_type.HttpStatus{
+					Code: envoy_type.StatusCode_Found, // 302
+				},
+				Headers: headers,
+				Body:    message,
 			},
 		},
 	}

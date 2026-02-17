@@ -90,3 +90,6 @@ clean-all: clean ## Clean all artifacts including Docker
 dev: fmt vet build ## Format, vet and build
 
 all: deps fmt vet test build ## Run all checks and build
+
+vul:
+	govulncheck

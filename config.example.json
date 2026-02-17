@@ -1,0 +1,16 @@
+{
+  "server": {
+    "grpc_port": 9001,
+    "host": "0.0.0.0"
+  },
+  "log": {
+    "level": "info",
+    "json_format": false
+  },
+  "kerberos": {
+    "enabled": true,
+    "keytab": "/etc/krb5.keytab",
+    "service_principal": "HTTP/service.example.com@REALM",
+    "login_page_url": "https://dc-1.ald.company.lan/ad/ui/#/login"
+  }
+}

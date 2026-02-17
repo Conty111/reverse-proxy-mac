@@ -10,8 +10,9 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Server ServerConfig `json:"server"`
-	Log    LogConfig    `json:"log"`
+	Server   ServerConfig   `json:"server"`
+	Log      LogConfig      `json:"log"`
+	Kerberos KerberosConfig `json:"kerberos"`
 }
 
 // ServerConfig contains server-related configuration
@@ -24,6 +25,14 @@ type ServerConfig struct {
 type LogConfig struct {
 	Level      string `json:"level"`
 	JSONFormat bool   `json:"json_format"`
+}
+
+// KerberosConfig contains Kerberos authentication configuration
+type KerberosConfig struct {
+	Enabled         bool   `json:"enabled"`
+	Keytab          string `json:"keytab"`
+	ServicePrincipal string `json:"service_principal"`
+	LoginPageURL    string `json:"login_page_url"`
 }
 
 // Load loads configuration from a JSON file
@@ -47,6 +56,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Log.Level == "" {
 		cfg.Log.Level = "info"
+	}
+	if cfg.Kerberos.LoginPageURL == "" {
+		cfg.Kerberos.LoginPageURL = "https://dc-1.ald.company.lan/ad/ui/#/login"
 	}
 
 	return &cfg, nil

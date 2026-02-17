@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"reverse-proxy-mac/src/application/usecase"
+	"reverse-proxy-mac/src/domain/auth"
 	"reverse-proxy-mac/src/infrastructure/config"
 	"reverse-proxy-mac/src/infrastructure/grpc"
 	"reverse-proxy-mac/src/infrastructure/logging"
@@ -38,7 +39,32 @@ func main() {
 	})
 
 	// Initialize use case (business logic)
-	authorizer := usecase.NewAllowAllAuthorizer(log)
+	var authorizer auth.Authorizer
+	var kerberosErr error
+	
+	if cfg.Kerberos.Enabled {
+		log.Info(ctx, "Initializing Kerberos authorizer", map[string]interface{}{
+			"keytab":            cfg.Kerberos.Keytab,
+			"service_principal": cfg.Kerberos.ServicePrincipal,
+			"login_page_url":    cfg.Kerberos.LoginPageURL,
+		})
+		authorizer, kerberosErr = usecase.NewKerberosAuthorizer(
+			log,
+			cfg.Kerberos.Keytab,
+			cfg.Kerberos.ServicePrincipal,
+			cfg.Kerberos.LoginPageURL,
+			cfg.Kerberos.Enabled,
+		)
+		if kerberosErr != nil {
+			log.Error(ctx, "Failed to initialize Kerberos authorizer", map[string]interface{}{
+				"error": kerberosErr.Error(),
+			})
+			os.Exit(1)
+		}
+	} else {
+		log.Info(ctx, "Kerberos disabled, using allow-all authorizer", nil)
+		authorizer = usecase.NewAllowAllAuthorizer(log)
+	}
 
 	// Initialize gRPC services
 	authServiceV3 := grpc.NewAuthServiceV3(authorizer, log)

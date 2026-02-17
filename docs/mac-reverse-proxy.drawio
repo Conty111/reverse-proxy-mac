@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.3.6 Chrome/140.0.7339.249 Electron/38.8.0 Safari/537.36" version="29.3.6">
   <diagram name="Page-1" id="weAEbGBRhPlFxi2hKBRU">
-    <mxGraphModel dx="970" dy="628" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="925" dy="599" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -97,8 +97,8 @@
         <mxCell id="YHs0Q8TrsacV2Vwm1yE1-22" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="Get user&lt;div&gt;Get host&lt;/div&gt;&lt;div&gt;Get web resource&lt;/div&gt;" vertex="1">
           <mxGeometry height="60" width="120" x="700" y="150" as="geometry" />
         </mxCell>
-        <mxCell id="YHs0Q8TrsacV2Vwm1yE1-25" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="&lt;div&gt;one of&lt;/div&gt;&lt;div&gt;- Access&lt;/div&gt;&lt;div&gt;- Deny&lt;/div&gt;&lt;div&gt;- Redirect (to the login page)&lt;/div&gt;" vertex="1">
-          <mxGeometry height="70" width="180" x="390" y="295" as="geometry" />
+        <mxCell id="YHs0Q8TrsacV2Vwm1yE1-25" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="&lt;div&gt;one of&lt;/div&gt;&lt;div&gt;- Access&lt;/div&gt;&lt;div&gt;- Deny&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="70" x="390" y="300" as="geometry" />
         </mxCell>
         <mxCell id="YHs0Q8TrsacV2Vwm1yE1-26" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="backend, host, web resource" vertex="1">
           <mxGeometry height="60" width="120" x="450" y="560" as="geometry" />

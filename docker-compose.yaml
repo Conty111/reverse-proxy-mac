@@ -5,12 +5,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: mac-authserver:latest
     container_name: mac-authserver
     hostname: mac-authserver
     ports:
       - "9001:9001"
     volumes:
       - ./config.json:/app/config.json:ro
+      - ./mac-authserver.keytab:/etc/mac-authserver.keytab:ro
     environment:
       - CONFIG_PATH=/app/config.json
     networks:
