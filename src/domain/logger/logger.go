@@ -1,10 +1,7 @@
 package logger
 
-import (
-	"context"
-)
+import "context"
 
-// Level represents log level
 type Level int
 
 const (
@@ -14,7 +11,6 @@ const (
 	LevelError
 )
 
-// Logger defines the logging interface
 type Logger interface {
 	Debug(ctx context.Context, msg string, fields map[string]interface{})
 	Info(ctx context.Context, msg string, fields map[string]interface{})

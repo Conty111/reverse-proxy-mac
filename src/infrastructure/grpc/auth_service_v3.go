@@ -13,14 +13,12 @@ import (
 	"reverse-proxy-mac/src/domain/logger"
 )
 
-// AuthServiceV3 implements Envoy External Authorization API v3 for HTTP (L7)
 type AuthServiceV3 struct {
 	envoy_auth.UnimplementedAuthorizationServer
 	authorizer auth.Authorizer
 	logger     logger.Logger
 }
 
-// NewAuthServiceV3 creates a new L7 authorization service
 func NewAuthServiceV3(authorizer auth.Authorizer, log logger.Logger) *AuthServiceV3 {
 	return &AuthServiceV3{
 		authorizer: authorizer,
@@ -28,25 +26,14 @@ func NewAuthServiceV3(authorizer auth.Authorizer, log logger.Logger) *AuthServic
 	}
 }
 
-// Check performs authorization check for HTTP requests (L7)
 func (s *AuthServiceV3) Check(ctx context.Context, req *envoy_auth.CheckRequest) (*envoy_auth.CheckResponse, error) {
-	s.logger.Debug(ctx, "Received L7 (HTTP) authorization check", map[string]interface{}{
-		"request_id": req.GetAttributes().GetRequest().GetHttp().GetId(),
-	})
-
-	// Convert Envoy request to domain request
 	authReq := s.convertToAuthRequest(req)
-
-	// Perform authorization
 	authResp, err := s.authorizer.Authorize(ctx, authReq)
 	if err != nil {
-		s.logger.Error(ctx, "Authorization failed", map[string]interface{}{
-			"error": err.Error(),
-		})
+		s.logger.Error(ctx, "Authorization failed", map[string]interface{}{"error": err.Error()})
 		return s.createDeniedResponse(codes.Internal, "Internal authorization error"), nil
 	}
 
-	// Convert domain response to Envoy response
 	return s.convertToEnvoyResponse(authResp), nil
 }
 
@@ -57,26 +44,23 @@ func (s *AuthServiceV3) convertToAuthRequest(req *envoy_auth.CheckRequest) *auth
 	dest := attrs.GetDestination()
 
 	authReq := &auth.AuthRequest{
-		RequestID: httpReq.GetId(),
-		Protocol:  httpReq.GetProtocol(),
+		RequestID:   httpReq.GetId(),
+		Protocol:    httpReq.GetProtocol(),
+		HTTPMethod:  httpReq.GetMethod(),
+		HTTPPath:    httpReq.GetPath(),
+		HTTPHeaders: make(map[string]string),
 	}
 
-	// Source information
 	if source != nil {
 		authReq.SourceIP = source.GetAddress().GetSocketAddress().GetAddress()
 		authReq.SourcePort = int32(source.GetAddress().GetSocketAddress().GetPortValue())
 	}
 
-	// Destination information
 	if dest != nil {
 		authReq.DestIP = dest.GetAddress().GetSocketAddress().GetAddress()
 		authReq.DestPort = int32(dest.GetAddress().GetSocketAddress().GetPortValue())
 	}
 
-	// HTTP-specific information
-	authReq.HTTPMethod = httpReq.GetMethod()
-	authReq.HTTPPath = httpReq.GetPath()
-	authReq.HTTPHeaders = make(map[string]string)
 	for k, v := range httpReq.GetHeaders() {
 		authReq.HTTPHeaders[k] = v
 	}
@@ -86,7 +70,6 @@ func (s *AuthServiceV3) convertToAuthRequest(req *envoy_auth.CheckRequest) *auth
 
 func (s *AuthServiceV3) convertToEnvoyResponse(authResp *auth.AuthResponse) *envoy_auth.CheckResponse {
 	if authResp.Decision == auth.DecisionAllow {
-		// Build response headers if any
 		var headers []*envoy_core.HeaderValueOption
 		for k, v := range authResp.Headers {
 			headers = append(headers, &envoy_core.HeaderValueOption{
@@ -109,9 +92,12 @@ func (s *AuthServiceV3) convertToEnvoyResponse(authResp *auth.AuthResponse) *env
 		}
 	}
 
-	// Handle redirect (302) separately
 	if authResp.DeniedStatus == 302 {
 		return s.createRedirectResponse(authResp.Headers["Location"], authResp.DeniedMessage)
+	}
+
+	if authResp.DeniedStatus == 401 {
+		return s.createUnauthorizedResponse(authResp.DeniedMessage, authResp.Headers)
 	}
 
 	return s.createDeniedResponse(codes.PermissionDenied, authResp.DeniedMessage)
@@ -129,6 +115,34 @@ func (s *AuthServiceV3) createDeniedResponse(code codes.Code, message string) *e
 					Code: envoy_type.StatusCode_Forbidden,
 				},
 				Body: message,
+			},
+		},
+	}
+}
+
+func (s *AuthServiceV3) createUnauthorizedResponse(message string, headers map[string]string) *envoy_auth.CheckResponse {
+	var headerOptions []*envoy_core.HeaderValueOption
+	for k, v := range headers {
+		headerOptions = append(headerOptions, &envoy_core.HeaderValueOption{
+			Header: &envoy_core.HeaderValue{
+				Key:   k,
+				Value: v,
+			},
+		})
+	}
+
+	return &envoy_auth.CheckResponse{
+		Status: &status.Status{
+			Code:    int32(codes.Unauthenticated),
+			Message: message,
+		},
+		HttpResponse: &envoy_auth.CheckResponse_DeniedResponse{
+			DeniedResponse: &envoy_auth.DeniedHttpResponse{
+				Status: &envoy_type.HttpStatus{
+					Code: envoy_type.StatusCode_Unauthorized,
+				},
+				Headers: headerOptions,
+				Body:    message,
 			},
 		},
 	}
@@ -152,7 +166,7 @@ func (s *AuthServiceV3) createRedirectResponse(location string, message string) 
 		HttpResponse: &envoy_auth.CheckResponse_DeniedResponse{
 			DeniedResponse: &envoy_auth.DeniedHttpResponse{
 				Status: &envoy_type.HttpStatus{
-					Code: envoy_type.StatusCode_Found, // 302
+					Code: envoy_type.StatusCode_Found,
 				},
 				Headers: headers,
 				Body:    message,
@@ -160,4 +174,3 @@ func (s *AuthServiceV3) createRedirectResponse(location string, message string) 
 		},
 	}
 }
-

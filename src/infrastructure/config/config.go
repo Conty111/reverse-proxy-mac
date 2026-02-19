@@ -8,34 +8,36 @@ import (
 	"reverse-proxy-mac/src/domain/logger"
 )
 
-// Config represents the application configuration
 type Config struct {
 	Server   ServerConfig   `json:"server"`
 	Log      LogConfig      `json:"log"`
 	Kerberos KerberosConfig `json:"kerberos"`
 }
 
-// ServerConfig contains server-related configuration
 type ServerConfig struct {
 	GRPCPort int    `json:"grpc_port"`
 	Host     string `json:"host"`
 }
 
-// LogConfig contains logging configuration
 type LogConfig struct {
 	Level      string `json:"level"`
 	JSONFormat bool   `json:"json_format"`
 }
 
-// KerberosConfig contains Kerberos authentication configuration
 type KerberosConfig struct {
-	Enabled         bool   `json:"enabled"`
-	Keytab          string `json:"keytab"`
-	ServicePrincipal string `json:"service_principal"`
-	LoginPageURL    string `json:"login_page_url"`
+	Keytab           string     `json:"keytab"`
+	ServicePrincipal string     `json:"service_principal"`
+	LDAP             LDAPConfig `json:"ldap"`
 }
 
-// Load loads configuration from a JSON file
+type LDAPConfig struct {
+	TLS        bool   `json:"tls"`
+	Port       int    `json:"port"`
+	Host       string `json:"host"`
+	BaseDN     string `json:"base_dn"`
+	UserFilter string `json:"user_filter"`
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -47,24 +49,32 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Set defaults
-	if cfg.Server.GRPCPort == 0 {
-		cfg.Server.GRPCPort = 9001
-	}
-	if cfg.Server.Host == "" {
-		cfg.Server.Host = "0.0.0.0"
-	}
-	if cfg.Log.Level == "" {
-		cfg.Log.Level = "info"
-	}
-	if cfg.Kerberos.LoginPageURL == "" {
-		cfg.Kerberos.LoginPageURL = "https://dc-1.ald.company.lan/ad/ui/#/login"
-	}
-
+	cfg.setDefaults()
 	return &cfg, nil
 }
 
-// GetLogLevel converts string log level to logger.Level
+func (c *Config) setDefaults() {
+	if c.Server.GRPCPort == 0 {
+		c.Server.GRPCPort = 9001
+	}
+	if c.Server.Host == "" {
+		c.Server.Host = "0.0.0.0"
+	}
+	if c.Log.Level == "" {
+		c.Log.Level = "info"
+	}
+	if c.Kerberos.LDAP.Port == 0 {
+		if c.Kerberos.LDAP.TLS {
+			c.Kerberos.LDAP.Port = 636
+		} else {
+			c.Kerberos.LDAP.Port = 389
+		}
+	}
+	if c.Kerberos.LDAP.UserFilter == "" {
+		c.Kerberos.LDAP.UserFilter = "(sAMAccountName=%s)"
+	}
+}
+
 func (c *LogConfig) GetLogLevel() logger.Level {
 	switch c.Level {
 	case "debug":
@@ -79,4 +89,3 @@ func (c *LogConfig) GetLogLevel() logger.Level {
 		return logger.LevelInfo
 	}
 }
-

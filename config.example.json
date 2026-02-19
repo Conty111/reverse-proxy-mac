@@ -11,6 +11,12 @@
     "enabled": true,
     "keytab": "/etc/krb5.keytab",
     "service_principal": "HTTP/service.example.com@REALM",
-    "login_page_url": "https://dc-1.ald.company.lan/ad/ui/#/login"
+    "ldap": {
+      "tls": false,
+      "port": 389,
+      "host": "example.company.lan",
+      "base_dn": "DC=example,DC=company,DC=lan",
+      "user_filter": "(sAMAccountName=%s)"
+    }
   }
 }

@@ -10,13 +10,11 @@ import (
 	"reverse-proxy-mac/src/domain/logger"
 )
 
-// ConsoleLogger implements Logger interface with console output
 type ConsoleLogger struct {
 	level      logger.Level
 	jsonFormat bool
 }
 
-// NewConsoleLogger creates a new console logger
 func NewConsoleLogger(level logger.Level, jsonFormat bool) *ConsoleLogger {
 	return &ConsoleLogger{
 		level:      level,
@@ -63,23 +61,18 @@ func (l *ConsoleLogger) logText(level, msg string, fields map[string]interface{}
 	log.Println(output)
 }
 
-// Debug logs a debug message
 func (l *ConsoleLogger) Debug(ctx context.Context, msg string, fields map[string]interface{}) {
 	l.log(logger.LevelDebug, "DEBUG", ctx, msg, fields)
 }
 
-// Info logs an info message
 func (l *ConsoleLogger) Info(ctx context.Context, msg string, fields map[string]interface{}) {
 	l.log(logger.LevelInfo, "INFO", ctx, msg, fields)
 }
 
-// Warn logs a warning message
 func (l *ConsoleLogger) Warn(ctx context.Context, msg string, fields map[string]interface{}) {
 	l.log(logger.LevelWarn, "WARN", ctx, msg, fields)
 }
 
-// Error logs an error message
 func (l *ConsoleLogger) Error(ctx context.Context, msg string, fields map[string]interface{}) {
 	l.log(logger.LevelError, "ERROR", ctx, msg, fields)
 }
-

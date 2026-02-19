@@ -12,14 +12,12 @@ import (
 	"reverse-proxy-mac/src/domain/logger"
 )
 
-// ExtProcServiceV3 implements Envoy External Processing API v3 for L3-L4
 type ExtProcServiceV3 struct {
 	ext_proc.UnimplementedExternalProcessorServer
 	authorizer auth.Authorizer
 	logger     logger.Logger
 }
 
-// NewExtProcServiceV3 creates a new L3-L4 external processing service
 func NewExtProcServiceV3(authorizer auth.Authorizer, log logger.Logger) *ExtProcServiceV3 {
 	return &ExtProcServiceV3{
 		authorizer: authorizer,
@@ -27,29 +25,22 @@ func NewExtProcServiceV3(authorizer auth.Authorizer, log logger.Logger) *ExtProc
 	}
 }
 
-// Process handles the bidirectional streaming for external processing (L3-L4)
 func (s *ExtProcServiceV3) Process(stream ext_proc.ExternalProcessor_ProcessServer) error {
 	ctx := stream.Context()
-	s.logger.Info(ctx, "New L3-L4 external processing stream started", nil)
 
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
-			s.logger.Info(ctx, "L3-L4 stream closed by client", nil)
 			return nil
 		}
 		if err != nil {
-			s.logger.Error(ctx, "Error receiving from L3-L4 stream", map[string]interface{}{
-				"error": err.Error(),
-			})
+			s.logger.Error(ctx, "Error receiving from L3-L4 stream", map[string]interface{}{"error": err.Error()})
 			return err
 		}
 
 		resp := s.processRequest(ctx, req)
 		if err := stream.Send(resp); err != nil {
-			s.logger.Error(ctx, "Error sending L3-L4 response", map[string]interface{}{
-				"error": err.Error(),
-			})
+			s.logger.Error(ctx, "Error sending L3-L4 response", map[string]interface{}{"error": err.Error()})
 			return err
 		}
 	}
@@ -60,13 +51,12 @@ func (s *ExtProcServiceV3) processRequest(ctx context.Context, req *ext_proc.Pro
 	case *ext_proc.ProcessingRequest_RequestHeaders:
 		return s.processRequestHeaders(ctx, v.RequestHeaders)
 	case *ext_proc.ProcessingRequest_RequestBody:
-		return s.processRequestBody(ctx, v.RequestBody)
+		return s.processRequestBody()
 	case *ext_proc.ProcessingRequest_ResponseHeaders:
-		return s.processResponseHeaders(ctx, v.ResponseHeaders)
+		return s.processResponseHeaders()
 	case *ext_proc.ProcessingRequest_ResponseBody:
-		return s.processResponseBody(ctx, v.ResponseBody)
+		return s.processResponseBody()
 	default:
-		s.logger.Warn(ctx, "Unknown L3-L4 processing request type", nil)
 		return &ext_proc.ProcessingResponse{
 			Response: &ext_proc.ProcessingResponse_ImmediateResponse{
 				ImmediateResponse: &ext_proc.ImmediateResponse{
@@ -86,22 +76,9 @@ func (s *ExtProcServiceV3) processRequestHeaders(ctx context.Context, headers *e
 		Protocol:  "TCP",
 	}
 
-	// Log header information
-	headerCount := 0
-	if headers.Headers != nil {
-		headerCount = len(headers.Headers.Headers)
-	}
-
-	s.logger.Info(ctx, "Processing L3-L4 request headers", map[string]interface{}{
-		"header_count": headerCount,
-		"end_of_stream": headers.EndOfStream,
-	})
-
 	authResp, err := s.authorizer.Authorize(ctx, authReq)
 	if err != nil {
-		s.logger.Error(ctx, "L3-L4 authorization failed", map[string]interface{}{
-			"error": err.Error(),
-		})
+		s.logger.Error(ctx, "L3-L4 authorization failed", map[string]interface{}{"error": err.Error()})
 	}
 
 	if authResp != nil && authResp.Decision == auth.DecisionDeny {
@@ -117,7 +94,6 @@ func (s *ExtProcServiceV3) processRequestHeaders(ctx context.Context, headers *e
 		}
 	}
 
-	// Allow the request to continue
 	return &ext_proc.ProcessingResponse{
 		Response: &ext_proc.ProcessingResponse_RequestHeaders{
 			RequestHeaders: &ext_proc.HeadersResponse{},
@@ -125,11 +101,7 @@ func (s *ExtProcServiceV3) processRequestHeaders(ctx context.Context, headers *e
 	}
 }
 
-func (s *ExtProcServiceV3) processRequestBody(ctx context.Context, body *ext_proc.HttpBody) *ext_proc.ProcessingResponse {
-	s.logger.Debug(ctx, "Processing L3-L4 request body", map[string]interface{}{
-		"end_of_stream": body.EndOfStream,
-	})
-
+func (s *ExtProcServiceV3) processRequestBody() *ext_proc.ProcessingResponse {
 	return &ext_proc.ProcessingResponse{
 		Response: &ext_proc.ProcessingResponse_RequestBody{
 			RequestBody: &ext_proc.BodyResponse{},
@@ -137,9 +109,7 @@ func (s *ExtProcServiceV3) processRequestBody(ctx context.Context, body *ext_pro
 	}
 }
 
-func (s *ExtProcServiceV3) processResponseHeaders(ctx context.Context, headers *ext_proc.HttpHeaders) *ext_proc.ProcessingResponse {
-	s.logger.Debug(ctx, "Processing L3-L4 response headers", nil)
-
+func (s *ExtProcServiceV3) processResponseHeaders() *ext_proc.ProcessingResponse {
 	return &ext_proc.ProcessingResponse{
 		Response: &ext_proc.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &ext_proc.HeadersResponse{},
@@ -147,15 +117,10 @@ func (s *ExtProcServiceV3) processResponseHeaders(ctx context.Context, headers *
 	}
 }
 
-func (s *ExtProcServiceV3) processResponseBody(ctx context.Context, body *ext_proc.HttpBody) *ext_proc.ProcessingResponse {
-	s.logger.Debug(ctx, "Processing L3-L4 response body", map[string]interface{}{
-		"end_of_stream": body.EndOfStream,
-	})
-
+func (s *ExtProcServiceV3) processResponseBody() *ext_proc.ProcessingResponse {
 	return &ext_proc.ProcessingResponse{
 		Response: &ext_proc.ProcessingResponse_ResponseBody{
 			ResponseBody: &ext_proc.BodyResponse{},
 		},
 	}
 }
-

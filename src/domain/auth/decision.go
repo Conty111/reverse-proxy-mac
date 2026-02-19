@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// Decision represents the authorization decision
 type Decision int
 
 const (
@@ -13,7 +12,6 @@ const (
 	DecisionDeny
 )
 
-// AuthRequest represents a generic authorization request
 type AuthRequest struct {
 	RequestID   string
 	Timestamp   time.Time
@@ -27,7 +25,6 @@ type AuthRequest struct {
 	HTTPHeaders map[string]string
 }
 
-// AuthResponse represents the authorization response
 type AuthResponse struct {
 	Decision      Decision
 	Reason        string
@@ -36,7 +33,6 @@ type AuthResponse struct {
 	Headers       map[string]string
 }
 
-// Authorizer defines the interface for authorization logic
 type Authorizer interface {
 	Authorize(ctx context.Context, req *AuthRequest) (*AuthResponse, error)
 }
