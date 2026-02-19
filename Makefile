@@ -7,7 +7,7 @@ DOCKER_IMAGE=mac-authserver
 DOCKER_COMPOSE=docker-compose
 GO=go
 GOFLAGS=-v
-BUILD_DIR=.
+BUILD_DIR=./build
 SRC_DIR=./src/cmd/authserver
 
 # Default target

@@ -10,7 +10,7 @@ krb5.keytab
 # Configuration files with secrets
 config.json
 *.secret.json
-
+build/*
 # Go build artifacts
 *.exe
 *.exe~
