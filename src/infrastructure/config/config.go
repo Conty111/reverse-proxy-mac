@@ -9,9 +9,9 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `json:"server"`
-	Log      LogConfig      `json:"log"`
-	Kerberos KerberosConfig `json:"kerberos"`
+	Server ServerConfig `json:"server"`
+	Log    LogConfig    `json:"log"`
+	LDAP   LDAPConfig   `json:"ldap"`
 }
 
 type ServerConfig struct {
@@ -24,18 +24,20 @@ type LogConfig struct {
 	JSONFormat bool   `json:"json_format"`
 }
 
-type KerberosConfig struct {
-	Keytab           string     `json:"keytab"`
-	ServicePrincipal string     `json:"service_principal"`
-	LDAP             LDAPConfig `json:"ldap"`
+type LDAPConfig struct {
+	TLS        bool           `json:"tls"`
+	Port       int            `json:"port"`
+	Host       string         `json:"host"`
+	BaseDN     string         `json:"base_dn"`
+	UserFilter string         `json:"user_filter"`
+	Kerberos   KerberosConfig `json:"kerberos"`
 }
 
-type LDAPConfig struct {
-	TLS        bool   `json:"tls"`
-	Port       int    `json:"port"`
-	Host       string `json:"host"`
-	BaseDN     string `json:"base_dn"`
-	UserFilter string `json:"user_filter"`
+type KerberosConfig struct {
+	Keytab     string `json:"keytab"`
+	Principal  string `json:"principal"`
+	Realm      string `json:"realm"`
+	ConfigPath string `json:"config_path"`
 }
 
 func Load(path string) (*Config, error) {
@@ -63,15 +65,15 @@ func (c *Config) setDefaults() {
 	if c.Log.Level == "" {
 		c.Log.Level = "info"
 	}
-	if c.Kerberos.LDAP.Port == 0 {
-		if c.Kerberos.LDAP.TLS {
-			c.Kerberos.LDAP.Port = 636
+	if c.LDAP.Port == 0 {
+		if c.LDAP.TLS {
+			c.LDAP.Port = 636
 		} else {
-			c.Kerberos.LDAP.Port = 389
+			c.LDAP.Port = 389
 		}
 	}
-	if c.Kerberos.LDAP.UserFilter == "" {
-		c.Kerberos.LDAP.UserFilter = "(sAMAccountName=%s)"
+	if c.LDAP.UserFilter == "" {
+		c.LDAP.UserFilter = "(sAMAccountName=%s)"
 	}
 }
 

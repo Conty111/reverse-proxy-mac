@@ -13,6 +13,7 @@ services:
     volumes:
       - ./config.json:/app/config.json:ro
       - ./mac-authserver.keytab:/etc/mac-authserver.keytab:ro
+      - ./krb5.conf:/etc/krb5.conf:ro
     environment:
       - CONFIG_PATH=/app/config.json
     networks:

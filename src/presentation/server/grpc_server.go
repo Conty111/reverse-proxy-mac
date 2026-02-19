@@ -66,9 +66,13 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 
 	s.logger.Info(ctx, "gRPC server starting", map[string]interface{}{"address": addr})
 
+	// Start server in goroutine with independent context for logging
+	// The server will run until GracefulStop is called
 	go func() {
+		// Use background context for the goroutine to avoid premature cancellation
+		serverCtx := context.Background()
 		if err := s.server.Serve(listener); err != nil {
-			s.logger.Error(ctx, "gRPC server error", map[string]interface{}{"error": err.Error()})
+			s.logger.Error(serverCtx, "gRPC server error", map[string]interface{}{"error": err.Error()})
 		}
 	}()
 

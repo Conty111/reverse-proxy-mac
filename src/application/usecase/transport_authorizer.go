@@ -14,12 +14,7 @@ type TransportAuthorizer struct {
 	ldapClient ldap.LDAPClient
 }
 
-func NewTransportAuthorizer(log logger.Logger, keytabPath, servicePrincipal string, ldapClient ldap.LDAPClient) (*TransportAuthorizer, error) {
-	log.Info(context.Background(), "TransportAuthorizer initialized", map[string]interface{}{
-		"keytab_path":       keytabPath,
-		"service_principal": servicePrincipal,
-	})
-
+func NewTransportAuthorizer(log logger.Logger, ldapClient ldap.LDAPClient) (*TransportAuthorizer, error) {
 	return &TransportAuthorizer{
 		logger:     log,
 		ldapClient: ldapClient,
