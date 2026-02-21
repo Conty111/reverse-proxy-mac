@@ -70,8 +70,8 @@ func (cl *Client) SearchUser(ctx context.Context, username string) (*UserInfo, e
 	entry.Print()
 
 	return &UserInfo{
-		DN: entry.DN,
-		UID: entry.GetAttributeValue("uid"),
+		DN:   entry.DN,
+		UID:  entry.GetAttributeValue("uid"),
 		Name: entry.GetAttributeValue("name"),
 	}, nil
 }

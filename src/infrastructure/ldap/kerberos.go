@@ -22,9 +22,9 @@ func (c *Client) initKerberos(cfg *config.KerberosConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to load keytab: %w", err)
 	}
-	
+
 	c.logger.Info(context.Background(), "Keytab loaded successfully", map[string]interface{}{
-		"keytab_path":    cfg.Keytab,
+		"keytab_path": cfg.Keytab,
 	})
 
 	c.keytab = kt
@@ -37,7 +37,7 @@ func (c *Client) initKerberos(cfg *config.KerberosConfig) error {
 		"keytab":      cfg.Keytab,
 		"config_path": cfg.ConfigPath,
 	})
-	
+
 	gssapiClient, err := gssapi.NewClientWithKeytab(
 		c.kerberosPrincipal,
 		c.kerberosRealm,
@@ -121,13 +121,13 @@ func (cl *Client) VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (
 		cl.keytab,
 		service.DecodePAC(false), // NOTE! Disabled PAC decoding because of error
 	)
-	
+
 	valid, creds, err := service.VerifyAPREQ(&krb5Token.APReq, settings)
 	if err != nil {
 		cl.logger.Error(ctx, "AP-REQ verification failed", map[string]interface{}{
-			"error":              err.Error(),
-			"ticket_realm":       krb5Token.APReq.Ticket.Realm,
-			"ticket_sname":       krb5Token.APReq.Ticket.SName.PrincipalNameString(),
+			"error":        err.Error(),
+			"ticket_realm": krb5Token.APReq.Ticket.Realm,
+			"ticket_sname": krb5Token.APReq.Ticket.SName.PrincipalNameString(),
 		})
 		return nil, fmt.Errorf("failed to verify AP-REQ: %w", err)
 	}

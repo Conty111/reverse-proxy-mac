@@ -21,8 +21,8 @@ type LDAPClient interface {
 }
 
 type UserInfo struct {
-	UID string
-	DN string
+	UID  string
+	DN   string
 	Name string
 }
 
@@ -36,9 +36,9 @@ type Client struct {
 	kerberosPrincipal string
 	kerberosRealm     string
 
-	logger            logger.Logger
+	logger logger.Logger
 
-	gssApiClient      ldap.GSSAPIClient
+	gssApiClient   ldap.GSSAPIClient
 	ldapConnection *ldap.Conn
 }
 
@@ -78,7 +78,7 @@ func (cl *Client) Close() error {
 
 func (cl *Client) connect() (*ldap.Conn, error) {
 	address := fmt.Sprintf("ldaps://%s:%d", cl.host, cl.port)
-	
+
 	currentTime := time.Now()
 	cl.logger.Debug(context.Background(), "Connecting to LDAP server", map[string]interface{}{
 		"address":      address,
@@ -89,10 +89,10 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 	})
 
 	conn, err := ldap.DialURL(
-		address, 
+		address,
 		ldap.DialWithTLSConfig(&tls.Config{
 			InsecureSkipVerify: true, // TODO: enable tls connection
-	}))
+		}))
 	if err != nil {
 		cl.logger.Error(context.Background(), "Failed to dial LDAP server", map[string]interface{}{
 			"error":   err.Error(),

@@ -4,19 +4,19 @@
     "host": "0.0.0.0"
   },
   "log": {
-    "level": "info",
+    "level": "debug",
     "json_format": false
   },
-  "kerberos": {
-    "enabled": true,
-    "keytab": "/etc/krb5.keytab",
-    "service_principal": "HTTP/service.example.com@REALM",
-    "ldap": {
-      "tls": false,
-      "port": 389,
-      "host": "example.company.lan",
-      "base_dn": "DC=example,DC=company,DC=lan",
-      "user_filter": "(sAMAccountName=%s)"
-    }
+  "ldap": {
+    "kerberos": {
+      "keytab": "/etc/mac-authserver.keytab",
+      "principal": "HTTP/mac-authserver.ald.company.lan",
+      "realm": "ALD.COMPANY.LAN",
+      "config_path": "/etc/krb5.conf"
+    },
+    "port": 636,
+    "host": "dc-1.ald.company.lan",
+    "base_dn": "DC=ald,DC=company,DC=lan",
+    "user_filter": "(uid=%s)"
   }
 }
