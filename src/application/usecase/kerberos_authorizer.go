@@ -69,7 +69,7 @@ func (a *KerberosAuthorizer) Authorize(ctx context.Context, req *auth.AuthReques
 		"X-Auth-Realm":         ticket.Realm(),
 	}
 
-	userInfo, err := a.ldapClient.SearchUser(ctx, principal)
+	_, err = a.ldapClient.SearchUser(ctx, principal)
 	if err != nil {
 		a.logger.Warn(ctx, "LDAP user lookup failed after successful Kerberos authentication", map[string]interface{}{
 			"principal": principal,
@@ -80,9 +80,7 @@ func (a *KerberosAuthorizer) Authorize(ctx context.Context, req *auth.AuthReques
 	} else {
 		a.logger.Info(ctx, "LDAP user lookup successful", map[string]interface{}{
 			"principal": principal,
-			"email":     userInfo.Email,
 		})
-		a.addUserHeadersIfPresent(responseHeaders, userInfo)
 	}
 
 	return &auth.AuthResponse{
@@ -90,12 +88,6 @@ func (a *KerberosAuthorizer) Authorize(ctx context.Context, req *auth.AuthReques
 		Reason:   fmt.Sprintf("Kerberos authentication successful for %s", ticket.CName().PrincipalNameString()),
 		Headers:  responseHeaders,
 	}, nil
-}
-
-func (a *KerberosAuthorizer) addUserHeadersIfPresent(headers map[string]string, userInfo *ldap.UserInfo) {
-	if userInfo.Email != "" {
-		headers["X-ALD-User-Email"] = userInfo.Email
-	}
 }
 
 func (a *KerberosAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {

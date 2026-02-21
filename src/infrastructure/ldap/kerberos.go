@@ -23,43 +23,19 @@ func (c *Client) initKerberos(cfg *config.KerberosConfig) error {
 		return fmt.Errorf("failed to load keytab: %w", err)
 	}
 	
-	// Log keytab entries for diagnostics
-	entries := kt.Entries
 	c.logger.Info(context.Background(), "Keytab loaded successfully", map[string]interface{}{
 		"keytab_path":    cfg.Keytab,
-		"entries_count":  len(entries),
-	})
-	
-	// Log encryption types available in keytab
-	etypes := make(map[int32]bool)
-	for _, entry := range entries {
-		etypes[entry.Key.KeyType] = true
-	}
-	etypesList := make([]int32, 0, len(etypes))
-	for etype := range etypes {
-		etypesList = append(etypesList, etype)
-	}
-	c.logger.Debug(context.Background(), "Keytab encryption types", map[string]interface{}{
-		"etypes": etypesList,
 	})
 
 	c.keytab = kt
 	c.kerberosRealm = cfg.Realm
 	c.kerberosPrincipal = cfg.Principal
 
-	c.logger.Info(context.Background(), "Initializing Kerberos client", map[string]interface{}{
+	c.logger.Info(context.Background(), "Initializing Kerberos client: creating GSSAPI client", map[string]interface{}{
 		"principal":   c.kerberosPrincipal,
 		"realm":       c.kerberosRealm,
 		"keytab":      cfg.Keytab,
 		"config_path": cfg.ConfigPath,
-	})
-
-	c.logger.Debug(context.Background(), "Creating GSSAPI client", map[string]interface{}{
-		"principal":   c.kerberosPrincipal,
-		"realm":       c.kerberosRealm,
-		"keytab":      cfg.Keytab,
-		"config_path": cfg.ConfigPath,
-		"pafx_fast":   "disabled",
 	})
 	
 	gssapiClient, err := gssapi.NewClientWithKeytab(
@@ -78,7 +54,7 @@ func (c *Client) initKerberos(cfg *config.KerberosConfig) error {
 		return fmt.Errorf("failed to create gssapi client: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Attempting GSSAPI client login", map[string]interface{}{
+	c.logger.Info(context.Background(), "Attempting login with created GSSAPI client", map[string]interface{}{
 		"principal": c.kerberosPrincipal,
 		"realm":     c.kerberosRealm,
 	})
@@ -141,11 +117,17 @@ func (cl *Client) VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (
 		return nil, fmt.Errorf("expected AP-REQ token")
 	}
 
-	settings := service.NewSettings(cl.keytab)
+	settings := service.NewSettings(
+		cl.keytab,
+		service.DecodePAC(false), // NOTE! Disabled PAC decoding because of error
+	)
+	
 	valid, creds, err := service.VerifyAPREQ(&krb5Token.APReq, settings)
 	if err != nil {
 		cl.logger.Error(ctx, "AP-REQ verification failed", map[string]interface{}{
-			"error": err.Error(),
+			"error":              err.Error(),
+			"ticket_realm":       krb5Token.APReq.Ticket.Realm,
+			"ticket_sname":       krb5Token.APReq.Ticket.SName.PrincipalNameString(),
 		})
 		return nil, fmt.Errorf("failed to verify AP-REQ: %w", err)
 	}
@@ -157,7 +139,7 @@ func (cl *Client) VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (
 		return nil, fmt.Errorf("ticket validation failed")
 	}
 
-	cl.logger.Debug(ctx, "Kerberos ticket verification completed", map[string]interface{}{
+	cl.logger.Info(ctx, "Kerberos ticket verification completed", map[string]interface{}{
 		"principal": creds.CName().PrincipalNameString(),
 		"realm":     creds.Realm(),
 	})

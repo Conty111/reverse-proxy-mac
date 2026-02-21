@@ -61,19 +61,17 @@ func (cl *Client) SearchUser(ctx context.Context, username string) (*UserInfo, e
 
 	entry := result.Entries[0]
 
-	// Extract email - try mail attribute first, then userPrincipalName
-	email := entry.GetAttributeValue("mail")
-	if email == "" {
-		email = entry.GetAttributeValue("userPrincipalName")
-	}
-
 	cl.logger.Info(ctx, "User found in LDAP", map[string]interface{}{
 		"username": username,
 		"dn":       entry.DN,
-		"email":    email,
 	})
 
+	// TODO: remove
+	entry.Print()
+
 	return &UserInfo{
-		Email: email,
+		DN: entry.DN,
+		UID: entry.GetAttributeValue("uid"),
+		Name: entry.GetAttributeValue("name"),
 	}, nil
 }

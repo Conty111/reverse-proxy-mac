@@ -2,6 +2,7 @@ package ldap
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"time"
 
@@ -20,7 +21,9 @@ type LDAPClient interface {
 }
 
 type UserInfo struct {
-	Email string
+	UID string
+	DN string
+	Name string
 }
 
 type Client struct {
@@ -74,7 +77,7 @@ func (cl *Client) Close() error {
 }
 
 func (cl *Client) connect() (*ldap.Conn, error) {
-	address := fmt.Sprintf("ldap://%s:%d", cl.host, cl.port)
+	address := fmt.Sprintf("ldaps://%s:%d", cl.host, cl.port)
 	
 	currentTime := time.Now()
 	cl.logger.Debug(context.Background(), "Connecting to LDAP server", map[string]interface{}{
@@ -85,7 +88,11 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 		"unix_time":    currentTime.Unix(),
 	})
 
-	conn, err := ldap.DialURL(address)
+	conn, err := ldap.DialURL(
+		address, 
+		ldap.DialWithTLSConfig(&tls.Config{
+			InsecureSkipVerify: true, // TODO: enable tls connection
+	}))
 	if err != nil {
 		cl.logger.Error(context.Background(), "Failed to dial LDAP server", map[string]interface{}{
 			"error":   err.Error(),
@@ -93,41 +100,6 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 		})
 		return nil, fmt.Errorf("failed to dial LDAP server: %w", err)
 	}
-
-	// Perform GSSAPI bind
-	ldapSPN := fmt.Sprintf("ldap/%s", cl.host)
-
-	cl.logger.Debug(context.Background(), "Attempting GSSAPI bind to LDAP", map[string]interface{}{
-		"spn":       ldapSPN,
-		"principal": cl.kerberosPrincipal,
-		"realm":     cl.kerberosRealm,
-	})
-
-	err = conn.GSSAPIBind(cl.gssApiClient, ldapSPN, "")
-	if err != nil {
-		cl.logger.Error(context.Background(), "GSSAPI bind to LDAP failed", map[string]interface{}{
-			"error":     err.Error(),
-			"spn":       ldapSPN,
-			"principal": cl.kerberosPrincipal,
-			"realm":     cl.kerberosRealm,
-			"host":      cl.host,
-			
-		})
-
-		// Close connection on bind failure
-		if closeErr := conn.Close(); closeErr != nil {
-			cl.logger.Warn(context.Background(), "Failed to close LDAP connection after bind failure", map[string]interface{}{
-				"error": closeErr.Error(),
-			})
-			return nil, fmt.Errorf("GSSAPI bind failed: %w (close error: %v)", err, closeErr)
-		}
-		return nil, fmt.Errorf("GSSAPI bind failed: %w", err)
-	}
-
-	cl.logger.Debug(context.Background(), "GSSAPI bind to LDAP successful", map[string]interface{}{
-		"spn":  ldapSPN,
-		"host": cl.host,
-	})
 
 	return conn, nil
 }
