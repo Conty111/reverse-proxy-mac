@@ -1,6 +1,6 @@
-<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.3.6 Chrome/140.0.7339.249 Electron/38.8.0 Safari/537.36" version="29.3.6">
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.5.1 Chrome/142.0.7444.265 Electron/39.6.1 Safari/537.36" version="29.5.1">
   <diagram name="Page-1" id="weAEbGBRhPlFxi2hKBRU">
-    <mxGraphModel dx="1454" dy="941" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="1018" dy="659" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -97,14 +97,20 @@
         <mxCell id="YHs0Q8TrsacV2Vwm1yE1-22" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="Get user&lt;div&gt;Get host&lt;/div&gt;&lt;div&gt;Get web resource&lt;/div&gt;" vertex="1">
           <mxGeometry height="60" width="120" x="630" y="150" as="geometry" />
         </mxCell>
-        <mxCell id="YHs0Q8TrsacV2Vwm1yE1-25" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="&lt;div&gt;one of&lt;/div&gt;&lt;div&gt;- Access&lt;/div&gt;&lt;div&gt;- Deny&lt;/div&gt;" vertex="1">
-          <mxGeometry height="60" width="70" x="320" y="300" as="geometry" />
+        <mxCell id="YHs0Q8TrsacV2Vwm1yE1-25" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="&lt;div&gt;one of&lt;/div&gt;&lt;div&gt;- Access&lt;/div&gt;&lt;div&gt;- Deny&lt;/div&gt;&lt;div&gt;- (Redirect)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="70" width="80" x="320" y="295" as="geometry" />
         </mxCell>
         <mxCell id="YHs0Q8TrsacV2Vwm1yE1-26" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="backend, host, web resource" vertex="1">
           <mxGeometry height="60" width="120" x="380" y="560" as="geometry" />
         </mxCell>
+        <mxCell id="HjCAaIFanQgblJX5rAQ4-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#d79b00;fillColor=none;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="390" width="370" x="475" y="10" as="geometry" />
+        </mxCell>
         <mxCell id="YHs0Q8TrsacV2Vwm1yE1-33" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="&lt;font style=&quot;font-size: 10px;&quot;&gt;2 метки:&lt;/font&gt;&lt;div&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;субъекта и объекта&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;в 1 тикета&lt;/font&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry height="60" width="120" x="730" y="70" as="geometry" />
+          <mxGeometry height="60" width="120" x="725" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="HjCAaIFanQgblJX5rAQ4-2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=0" value="Domain controller&lt;div&gt;(FreeIPA/ALD Pro)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="30" width="120" x="475" y="10" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
