@@ -15,7 +15,7 @@ import (
 )
 
 type LDAPClient interface {
-	SearchUser(ctx context.Context, username string) (*UserInfo, error)
+	SearchUser(ctx context.Context, username string, baseDN string) (*UserInfo, error)
 	VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (*credentials.Credentials, error)
 	Close() error
 }
@@ -27,10 +27,8 @@ type UserInfo struct {
 }
 
 type Client struct {
-	host              string
-	port              int
-	baseDN            string
-	userFilter        string
+	host string
+	port int
 	useTLS            bool
 	keytab            *keytab.Keytab
 	kerberosPrincipal string
@@ -45,12 +43,10 @@ type Client struct {
 func NewClient(cfg *config.LDAPConfig, logger logger.Logger) (*Client, error) {
 
 	c := &Client{
-		host:       cfg.Host,
-		port:       cfg.Port,
-		baseDN:     cfg.BaseDN,
-		userFilter: cfg.UserFilter,
-		useTLS:     cfg.TLS,
-		logger:     logger,
+		host: cfg.Host,
+		port: cfg.Port,
+		useTLS: cfg.TLS,
+		logger: logger,
 	}
 
 	if err := c.initKerberos(&cfg.Kerberos); err != nil {
@@ -91,7 +87,7 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 	conn, err := ldap.DialURL(
 		address,
 		ldap.DialWithTLSConfig(&tls.Config{
-			InsecureSkipVerify: true, // TODO: enable tls connection
+			InsecureSkipVerify: true, // TODO: enable verify tls connection
 		}))
 	if err != nil {
 		cl.logger.Error(context.Background(), "Failed to dial LDAP server", map[string]interface{}{
@@ -100,6 +96,33 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 		})
 		return nil, fmt.Errorf("failed to dial LDAP server: %w", err)
 	}
+
+	conn.Debug = true
+	
+	targetSPN := fmt.Sprintf("ldap/%s", cl.host)
+
+	cl.logger.Debug(context.Background(), "Attempting GSSAPI bind", map[string]interface{}{
+		"client_principal": cl.kerberosPrincipal,
+		"target_spn":       targetSPN,
+		"host":             cl.host,
+	})
+	
+	err = conn.GSSAPIBind(cl.gssApiClient, targetSPN, "")
+	if err != nil {
+		cl.logger.Error(context.Background(), "GSSAPI bind failed", map[string]interface{}{
+			"error":     err.Error(),
+			"principal": cl.kerberosPrincipal,
+			"host":      cl.host,
+		})
+		if err := conn.Close(); err != nil {
+			return nil, fmt.Errorf("GSSAPI connection close failed: %w", err)
+		}
+		return nil, fmt.Errorf("GSSAPI bind failed: %w", err)
+	}
+
+	cl.logger.Info(context.Background(), "GSSAPI bind successful", map[string]interface{}{
+		"principal": cl.kerberosPrincipal,
+	})
 
 	return conn, nil
 }

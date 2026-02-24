@@ -69,7 +69,8 @@ func (a *KerberosAuthorizer) Authorize(ctx context.Context, req *auth.AuthReques
 		"X-Auth-Realm":         ticket.Realm(),
 	}
 
-	_, err = a.ldapClient.SearchUser(ctx, principal)
+	baseDN := fmt.Sprintf("%s", realmToDN(realm))
+	_, err = a.ldapClient.SearchUser(ctx, principal, baseDN)
 	if err != nil {
 		a.logger.Warn(ctx, "LDAP user lookup failed after successful Kerberos authentication", map[string]interface{}{
 			"principal": principal,
@@ -100,4 +101,13 @@ func (a *KerberosAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {
 			"WWW-Authenticate": "Negotiate",
 		},
 	}
+}
+
+func realmToDN(realm string) string {
+	parts := strings.Split(strings.ToLower(realm), ".")
+	dnParts := make([]string, len(parts))
+	for i, part := range parts {
+		dnParts[i] = "dc=" + part
+	}
+	return strings.Join(dnParts, ",")
 }

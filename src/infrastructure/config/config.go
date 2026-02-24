@@ -25,12 +25,10 @@ type LogConfig struct {
 }
 
 type LDAPConfig struct {
-	TLS        bool           `json:"tls"`
-	Port       int            `json:"port"`
-	Host       string         `json:"host"`
-	BaseDN     string         `json:"base_dn"`
-	UserFilter string         `json:"user_filter"`
-	Kerberos   KerberosConfig `json:"kerberos"`
+	TLS  bool   `json:"tls"`
+	Port int    `json:"port"`
+	Host string `json:"host"`
+	Kerberos KerberosConfig `json:"kerberos"`
 }
 
 type KerberosConfig struct {
@@ -71,9 +69,6 @@ func (c *Config) setDefaults() {
 		} else {
 			c.LDAP.Port = 389
 		}
-	}
-	if c.LDAP.UserFilter == "" {
-		c.LDAP.UserFilter = "(sAMAccountName=%s)"
 	}
 }
 
