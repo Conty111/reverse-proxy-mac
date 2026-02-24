@@ -20,14 +20,21 @@
     ```bash
     ipa service-add HTTP/mac-authserver.ald.company.lan --force
     ```
+2. Выдать права на чтение пользовательских атрибутов
 
-2. Выписать Kerberos ключ для сервиса
+    ```bash
+    ipa role-add "User Attribute Reader" --desc="Can read user attributes"
+    ipa role-add-privilege "User Attribute Reader" --privileges="User Administrators"
+    ipa role-add-member "User Attribute Reader" --services=HTTP/mac-authserver.ald.company.lan@ALD.COMPANY.LAN
+    ```
+
+3. Выписать Kerberos ключ для сервиса
 
     ```bash
     ipa-getkeytab -s dc-1.ald.company.lan -p HTTP/mac-authserver.ald.company.lan -k /tmp/mac-authserver.keytab
     ```
 
-3. Файл ключа скопировать в корень репозитория
+4. Файл ключа скопировать в корень репозитория
 
 ### Локальный запуск
 
@@ -42,7 +49,6 @@
     ```bash
     make docker-build
     ```
-
 3.
     ```bash
     make docker-up
@@ -100,3 +106,4 @@ TODO: описать проверку в браузере
 - [Сброс пароля администратора контроллера домена](./docs/runbooks/dc-reset-password.md)
 - [Развертывание контроллера домена ALD Pro 3.0.0](https://www.aldpro.ru/professional/ALD_Pro_Module_02/ALD_Pro_deployment.html#aldpro-dc-packages-install)
 - [Развертывание контроллера домена FreeIPA на Astra Linux](https://wiki.astralinux.ru/pages/viewpage.action?pageId=27362143)
+- [Чтение пользовательских атрибутов (настройка прав)](https://wiki.astralinux.ru/pages/viewpage.action?pageId=153488486)

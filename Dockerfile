@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25.5-alpine AS builder
+FROM golang:1.26.0-alpine3.23 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make
@@ -30,9 +30,6 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /build/authserver .
-
-# Copy default config (can be overridden by volume mount)
-COPY config.json ./config.json
 
 # Expose gRPC port
 EXPOSE 9001

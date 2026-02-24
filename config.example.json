@@ -15,8 +15,6 @@
       "config_path": "/etc/krb5.conf"
     },
     "port": 636,
-    "host": "dc-1.ald.company.lan",
-    "base_dn": "DC=ald,DC=company,DC=lan",
-    "user_filter": "(uid=%s)"
+    "host": "dc-1.ald.company.lan"
   }
 }
