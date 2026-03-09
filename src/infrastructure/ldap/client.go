@@ -3,7 +3,9 @@ package ldap
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-ldap/ldap/v3"
@@ -27,9 +29,10 @@ type UserInfo struct {
 }
 
 type Client struct {
-	host string
-	port int
+	host              string
+	port              int
 	useTLS            bool
+	tlsConfig         *tls.Config
 	keytab            *keytab.Keytab
 	kerberosPrincipal string
 	kerberosRealm     string
@@ -43,10 +46,19 @@ type Client struct {
 func NewClient(cfg *config.LDAPConfig, logger logger.Logger) (*Client, error) {
 
 	c := &Client{
-		host: cfg.Host,
-		port: cfg.Port,
+		host:   cfg.Host,
+		port:   cfg.Port,
 		useTLS: cfg.TLS,
 		logger: logger,
+	}
+
+	// Configure TLS if enabled
+	if cfg.TLS {
+		tlsConfig, err := c.buildTLSConfig(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build TLS config: %w", err)
+		}
+		c.tlsConfig = tlsConfig
 	}
 
 	if err := c.initKerberos(&cfg.Kerberos); err != nil {
@@ -82,13 +94,18 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 		"port":         cl.port,
 		"current_time": currentTime.Format(time.RFC3339),
 		"unix_time":    currentTime.Unix(),
+		"tls_enabled":  cl.useTLS,
 	})
 
-	conn, err := ldap.DialURL(
-		address,
-		ldap.DialWithTLSConfig(&tls.Config{
-			InsecureSkipVerify: true, // TODO: enable verify tls connection
-		}))
+	var conn *ldap.Conn
+	var err error
+
+	if cl.useTLS && cl.tlsConfig != nil {
+		conn, err = ldap.DialURL(address, ldap.DialWithTLSConfig(cl.tlsConfig))
+	} else {
+		conn, err = ldap.DialURL(address)
+	}
+
 	if err != nil {
 		cl.logger.Error(context.Background(), "Failed to dial LDAP server", map[string]interface{}{
 			"error":   err.Error(),
@@ -96,8 +113,6 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 		})
 		return nil, fmt.Errorf("failed to dial LDAP server: %w", err)
 	}
-
-	conn.Debug = true
 	
 	targetSPN := fmt.Sprintf("ldap/%s", cl.host)
 
@@ -125,4 +140,38 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 	})
 
 	return conn, nil
+}
+
+// buildTLSConfig creates a TLS configuration based on the LDAP config
+func (cl *Client) buildTLSConfig(cfg *config.LDAPConfig) (*tls.Config, error) {
+	tlsConfig := &tls.Config{
+		ServerName:         cfg.Host,
+		InsecureSkipVerify: cfg.TLSSkipVerify,
+	}
+
+	// If a CA certificate file is provided, load it
+	if cfg.TLSCACertFile != "" {
+		caCert, err := os.ReadFile(cfg.TLSCACertFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA certificate file: %w", err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to parse CA certificate")
+		}
+
+		tlsConfig.RootCAs = caCertPool
+		tlsConfig.InsecureSkipVerify = false // Use proper verification with custom CA
+
+		cl.logger.Info(context.Background(), "Loaded custom CA certificate for LDAP TLS", map[string]interface{}{
+			"ca_cert_file": cfg.TLSCACertFile,
+		})
+	} else if cfg.TLSSkipVerify {
+		cl.logger.Warn(context.Background(), "TLS certificate verification is disabled for LDAP connection", map[string]interface{}{
+			"host": cfg.Host,
+		})
+	}
+
+	return tlsConfig, nil
 }

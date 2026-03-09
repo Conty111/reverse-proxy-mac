@@ -15,6 +15,9 @@
       "config_path": "/etc/krb5.conf"
     },
     "port": 636,
-    "host": "dc-1.ald.company.lan"
+    "host": "dc-1.ald.company.lan",
+    "tls": true,
+    "tls_skip_verify": true,
+    "tls_ca_cert_file": ""
   }
 }
