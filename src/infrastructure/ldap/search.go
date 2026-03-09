@@ -12,7 +12,6 @@ var defaultUserAttributes []string = []string{
 	"uid",
 	"cn",
 	"sn",
-	"mail",
 	"memberOf",
 	"uidNumber",
 	"gidNumber",
@@ -48,8 +47,7 @@ func (cl *Client) SearchUser(ctx context.Context, username string, baseDN string
 		0,
 		false,
 		searchFilter,
-		// allUserAttributes,
-		allUserAttributes, // Tempory DEBUG
+		allUserAttributes,
 		nil,
 	)
 
@@ -85,19 +83,11 @@ func (cl *Client) SearchUser(ctx context.Context, username string, baseDN string
 
 	entry := result.Entries[0]
 
-	cl.logger.Debug(ctx, "=== ALL ATTRIBUTES RETURNED BY LDAP ===", nil)
-	for _, attr := range entry.Attributes {
-		cl.logger.Debug(ctx, fmt.Sprintf("Attribute: %s", attr.Name), map[string]interface{}{
-			"values": attr.Values,
-			"count":  len(attr.Values),
-		})
-	}
-	cl.logger.Debug(ctx, "=== END OF ATTRIBUTES ===", nil)
-
 	cl.logger.Info(ctx, "User found in LDAP", map[string]interface{}{
 		"username": username,
 		"dn":       entry.DN,
 	})
+
 	info := make(map[string]interface{})
 	for _, attr := range allUserAttributes {
 		info[attr] = entry.GetAttributeValue(attr)
