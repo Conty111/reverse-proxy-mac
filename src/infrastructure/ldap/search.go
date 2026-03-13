@@ -3,42 +3,28 @@ package ldap
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-ldap/ldap/v3"
 )
 
-var defaultUserAttributes []string = []string{
-	"dn",
-	"uid",
-	"cn",
-	"sn",
-	"memberOf",
-	"uidNumber",
-	"gidNumber",
-	"krbPrincipalName",
+func realmToDN(realm string) string {
+	parts := strings.Split(strings.ToLower(realm), ".")
+	dnParts := make([]string, len(parts))
+	for i, part := range parts {
+		dnParts[i] = "dc=" + part
+	}
+	return strings.Join(dnParts, ",")
 }
 
-// https://www.aldpro.ru/professional/ALD_Pro_Module_13/ALD_Pro_mac_mic.html#freeipa
-var macUserAttributes []string = []string{
-	"x-ald-aud-mask",
-	"x-ald-aud-type",
-	"x-ald-user-mac",
-	"x-ald-user-cap",
-	"x-ald-user-caps",
-	"x-ald-user-mic-level",
-	"x-ald-user-mac",
-	"xaldusermacmax",
-	"xaldusermacmin",
-}
+func (cl *Client) Search(ctx context.Context, filter string, attributes []string) (*ldap.Entry, error) {
+	baseDN := fmt.Sprintf("%s", realmToDN(cl.kerberosRealm))
 
-func (cl *Client) SearchUser(ctx context.Context, username string, baseDN string) (*UserInfo, error) {
-	cl.logger.Debug(ctx, "Starting LDAP user search", map[string]interface{}{
-		"username": username,
-	})
-
-	searchFilter := fmt.Sprintf("(uid=%s)", ldap.EscapeFilter(username))
-	allUserAttributes := append(defaultUserAttributes, macUserAttributes...)
-
+	cl.Logger.Info(ctx, "Search request in LDAP", map[string]interface{}{
+			"filter":   filter,
+			"basedn": baseDN,
+			"attributes": attributes,
+		})
 	searchRequest := ldap.NewSearchRequest(
 		baseDN,
 		ldap.ScopeWholeSubtree,
@@ -46,57 +32,28 @@ func (cl *Client) SearchUser(ctx context.Context, username string, baseDN string
 		0,
 		0,
 		false,
-		searchFilter,
-		allUserAttributes,
+		filter,
+		attributes,
 		nil,
 	)
-
-	cl.logger.Debug(ctx, "Searching for user in LDAP", map[string]interface{}{
-		"username": username,
-		"filter":   searchFilter,
-	})
-
 	result, err := cl.ldapConnection.Search(searchRequest)
 	if err != nil {
-		cl.logger.Error(ctx, "LDAP search query failed", map[string]interface{}{
-			"username": username,
-			"filter":   searchFilter,
+		cl.Logger.Error(ctx, "LDAP search request failed", map[string]interface{}{
 			"error":    err.Error(),
 		})
 		return nil, fmt.Errorf("LDAP search failed: %w", err)
 	}
 
 	if len(result.Entries) == 0 {
-		cl.logger.Warn(ctx, "User not found in LDAP directory", map[string]interface{}{
-			"username": username,
-			"filter":   searchFilter,
-		})
-		return nil, fmt.Errorf("user not found: %s", username)
+		cl.Logger.Warn(ctx, "Empty search request result", map[string]interface{}{})
+		return nil, nil
 	}
 
 	if len(result.Entries) > 1 {
-		cl.logger.Warn(ctx, "Multiple LDAP entries found for user", map[string]interface{}{
-			"username": username,
+		cl.Logger.Warn(ctx, "Multiple LDAP entries found", map[string]interface{}{
 			"count":    len(result.Entries),
 		})
 	}
 
-	entry := result.Entries[0]
-
-	cl.logger.Info(ctx, "User found in LDAP", map[string]interface{}{
-		"username": username,
-		"dn":       entry.DN,
-	})
-
-	info := make(map[string]interface{})
-	for _, attr := range allUserAttributes {
-		info[attr] = entry.GetAttributeValue(attr)
-	}
-	cl.logger.Debug(ctx, "User info:", info)
-
-	return &UserInfo{
-		DN:   entry.DN,
-		UID:  entry.GetAttributeValue("uid"),
-		Name: entry.GetAttributeValue("name"),
-	}, nil
+	return result.Entries[0], nil
 }

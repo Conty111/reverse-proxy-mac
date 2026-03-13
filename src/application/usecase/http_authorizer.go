@@ -11,26 +11,19 @@ import (
 	"reverse-proxy-mac/src/infrastructure/ldap"
 )
 
-type KerberosAuthorizer struct {
+type HTTPAuthorizer struct {
 	logger     logger.Logger
-	ldapClient ldap.LDAPClient
+	ldapClient *ldap.Client
 }
 
-type TicketInfo struct {
-	Principal string
-	Realm     string
-	AuthTime  string
-	Valid     bool
-}
-
-func NewKerberosAuthorizer(log logger.Logger, ldapClient ldap.LDAPClient) (*KerberosAuthorizer, error) {
-	return &KerberosAuthorizer{
+func NewHTTPAuthorizer(log logger.Logger, ldapClient *ldap.Client) (*HTTPAuthorizer, error) {
+	return &HTTPAuthorizer{
 		logger:     log,
 		ldapClient: ldapClient,
 	}, nil
 }
 
-func (a *KerberosAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (*auth.AuthResponse, error) {
+func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (*auth.AuthResponse, error) {
 	authHeader, exists := req.HTTPHeaders["authorization"]
 	if !exists {
 		return a.createUnauthorizedResponse(), nil
@@ -69,29 +62,24 @@ func (a *KerberosAuthorizer) Authorize(ctx context.Context, req *auth.AuthReques
 		"X-Auth-Realm":         ticket.Realm(),
 	}
 
-	baseDN := fmt.Sprintf("%s", realmToDN(realm))
-	_, err = a.ldapClient.SearchUser(ctx, principal, baseDN)
-	if err != nil {
-		a.logger.Warn(ctx, "LDAP user lookup failed after successful Kerberos authentication", map[string]interface{}{
-			"principal": principal,
-			"realm":     realm,
-			"error":     err.Error(),
-			"impact":    "User authenticated but additional attributes unavailable",
-		})
-	} else {
-		a.logger.Info(ctx, "LDAP user lookup successful", map[string]interface{}{
-			"principal": principal,
-		})
-	}
+	// userSecCtx, err := GetUserHTTPSecurityContext(ctx, a.ldapClient, principal, req.HTTPMethod)
+	// if err != nil {
+	// 	a.logger.Error(ctx, "Failed to GetUserHTTPSecurityContext", map[string]interface{}{
+	// 		"error": err,
+	// 	})
+	// }
+
+	// TODO: get host fqdn by req.DestIP
+	// hostSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, req.DestIP)
 
 	return &auth.AuthResponse{
 		Decision: auth.DecisionAllow,
-		Reason:   fmt.Sprintf("Kerberos authentication successful for %s", ticket.CName().PrincipalNameString()),
+		Reason:   fmt.Sprintf("HTTP authentication successful for %s", ticket.CName().PrincipalNameString()),
 		Headers:  responseHeaders,
 	}, nil
 }
 
-func (a *KerberosAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {
+func (a *HTTPAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {
 	return &auth.AuthResponse{
 		Decision:      auth.DecisionDeny,
 		Reason:        "Kerberos authentication required",
@@ -101,13 +89,4 @@ func (a *KerberosAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {
 			"WWW-Authenticate": "Negotiate",
 		},
 	}
-}
-
-func realmToDN(realm string) string {
-	parts := strings.Split(strings.ToLower(realm), ".")
-	dnParts := make([]string, len(parts))
-	for i, part := range parts {
-		dnParts[i] = "dc=" + part
-	}
-	return strings.Join(dnParts, ",")
 }

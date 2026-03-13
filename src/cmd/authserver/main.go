@@ -44,7 +44,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	kerberosAuthHandler, err := usecase.NewKerberosAuthorizer(
+	httpAuthHandler, err := usecase.NewHTTPAuthorizer(
 		log,
 		ldapClient,
 	)
@@ -59,7 +59,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpAuthService := grpc.NewAuthServiceV3(kerberosAuthHandler, log)
+	httpAuthService := grpc.NewAuthServiceV3(httpAuthHandler, log)
 	transportAuthService := grpc.NewExtProcServiceV3(transportAuthHandler, log)
 
 	grpcServer := server.NewGRPCServer(cfg.Server.Host, cfg.Server.GRPCPort, httpAuthService, transportAuthService, log)

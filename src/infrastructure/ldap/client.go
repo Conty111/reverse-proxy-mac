@@ -9,18 +9,17 @@ import (
 	"time"
 
 	"github.com/go-ldap/ldap/v3"
-	"github.com/jcmturner/gokrb5/v8/credentials"
 	"github.com/jcmturner/gokrb5/v8/keytab"
 
 	"reverse-proxy-mac/src/domain/logger"
 	"reverse-proxy-mac/src/infrastructure/config"
 )
 
-type LDAPClient interface {
-	SearchUser(ctx context.Context, username string, baseDN string) (*UserInfo, error)
-	VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (*credentials.Credentials, error)
-	Close() error
-}
+// type LDAPClient interface {
+// 	SearchUser(ctx context.Context, username string, baseDN string) (*UserInfo, error)
+// 	VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (*credentials.Credentials, error)
+// 	Close() error
+// }
 
 type UserInfo struct {
 	UID  string
@@ -37,7 +36,7 @@ type Client struct {
 	kerberosPrincipal string
 	kerberosRealm     string
 
-	logger logger.Logger
+	Logger logger.Logger
 
 	gssApiClient   ldap.GSSAPIClient
 	ldapConnection *ldap.Conn
@@ -49,7 +48,7 @@ func NewClient(cfg *config.LDAPConfig, logger logger.Logger) (*Client, error) {
 		host:   cfg.Host,
 		port:   cfg.Port,
 		useTLS: cfg.TLS,
-		logger: logger,
+		Logger: logger,
 	}
 
 	// Configure TLS if enabled
@@ -77,7 +76,7 @@ func NewClient(cfg *config.LDAPConfig, logger logger.Logger) (*Client, error) {
 // Close cleans up resources used by the LDAP client
 func (cl *Client) Close() error {
 	if closeErr := cl.ldapConnection.Close(); closeErr != nil {
-		cl.logger.Warn(context.Background(), "Failed to close LDAP connection", map[string]interface{}{
+		cl.Logger.Warn(context.Background(), "Failed to close LDAP connection", map[string]interface{}{
 			"error": closeErr.Error(),
 		})
 	}
@@ -88,7 +87,7 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 	address := fmt.Sprintf("ldaps://%s:%d", cl.host, cl.port)
 
 	currentTime := time.Now()
-	cl.logger.Debug(context.Background(), "Connecting to LDAP server", map[string]interface{}{
+	cl.Logger.Debug(context.Background(), "Connecting to LDAP server", map[string]interface{}{
 		"address":      address,
 		"host":         cl.host,
 		"port":         cl.port,
@@ -107,7 +106,7 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 	}
 
 	if err != nil {
-		cl.logger.Error(context.Background(), "Failed to dial LDAP server", map[string]interface{}{
+		cl.Logger.Error(context.Background(), "Failed to dial LDAP server", map[string]interface{}{
 			"error":   err.Error(),
 			"address": address,
 		})
@@ -116,7 +115,7 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 	
 	targetSPN := fmt.Sprintf("ldap/%s", cl.host)
 
-	cl.logger.Debug(context.Background(), "Attempting GSSAPI bind", map[string]interface{}{
+	cl.Logger.Debug(context.Background(), "Attempting GSSAPI bind", map[string]interface{}{
 		"client_principal": cl.kerberosPrincipal,
 		"target_spn":       targetSPN,
 		"host":             cl.host,
@@ -124,7 +123,7 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 	
 	err = conn.GSSAPIBind(cl.gssApiClient, targetSPN, "")
 	if err != nil {
-		cl.logger.Error(context.Background(), "GSSAPI bind failed", map[string]interface{}{
+		cl.Logger.Error(context.Background(), "GSSAPI bind failed", map[string]interface{}{
 			"error":     err.Error(),
 			"principal": cl.kerberosPrincipal,
 			"host":      cl.host,
@@ -135,7 +134,7 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 		return nil, fmt.Errorf("GSSAPI bind failed: %w", err)
 	}
 
-	cl.logger.Info(context.Background(), "GSSAPI bind successful", map[string]interface{}{
+	cl.Logger.Info(context.Background(), "GSSAPI bind successful", map[string]interface{}{
 		"principal": cl.kerberosPrincipal,
 	})
 
@@ -164,11 +163,11 @@ func (cl *Client) buildTLSConfig(cfg *config.LDAPConfig) (*tls.Config, error) {
 		tlsConfig.RootCAs = caCertPool
 		tlsConfig.InsecureSkipVerify = false // Use proper verification with custom CA
 
-		cl.logger.Info(context.Background(), "Loaded custom CA certificate for LDAP TLS", map[string]interface{}{
+		cl.Logger.Info(context.Background(), "Loaded custom CA certificate for LDAP TLS", map[string]interface{}{
 			"ca_cert_file": cfg.TLSCACertFile,
 		})
 	} else if cfg.TLSSkipVerify {
-		cl.logger.Warn(context.Background(), "TLS certificate verification is disabled for LDAP connection", map[string]interface{}{
+		cl.Logger.Warn(context.Background(), "TLS certificate verification is disabled for LDAP connection", map[string]interface{}{
 			"host": cfg.Host,
 		})
 	}

@@ -11,10 +11,10 @@ import (
 
 type TransportAuthorizer struct {
 	logger     logger.Logger
-	ldapClient ldap.LDAPClient
+	ldapClient *ldap.Client
 }
 
-func NewTransportAuthorizer(log logger.Logger, ldapClient ldap.LDAPClient) (*TransportAuthorizer, error) {
+func NewTransportAuthorizer(log logger.Logger, ldapClient *ldap.Client) (*TransportAuthorizer, error) {
 	return &TransportAuthorizer{
 		logger:     log,
 		ldapClient: ldapClient,
