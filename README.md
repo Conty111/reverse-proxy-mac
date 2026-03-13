@@ -99,7 +99,14 @@ grpcurl -plaintext localhost:9001 grpc.health.v1.Health/Check
     ```
 
 #### Проверка в браузере
-TODO: описать проверку в браузере
+
+Необходим браузер, поддерживающий Kerberos авторизацию.
+
+1. Настроить браузер для Kerberos авторизации в домене
+2. Получить Kerberos тикет (можно в терминале командой `kinit <user>@<REALM>`)
+3. Перейти по адресу <http://mac-authserver.ald.company.lan:8080>
+
+Проверить работоспособность Kerberos авторизации в браузере можно попробовав войти в систему FreeIPA в Web UI ***не вводя имя пользователя и пароль*** (по адресу `https://<your.domain.controller.address/ipa/ui/`)
 
 ## Runbooks
 
