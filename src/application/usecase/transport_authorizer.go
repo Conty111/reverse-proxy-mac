@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"reverse-proxy-mac/src/domain/auth"
 	"reverse-proxy-mac/src/domain/logger"
@@ -22,8 +23,7 @@ func NewTransportAuthorizer(log logger.Logger, ldapClient *ldap.Client) (*Transp
 }
 
 func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (*auth.AuthResponse, error) {
-	// Log all provided authorization information
-	a.logger.Info(ctx, "TransportAuthorizer: Authorization request received", map[string]interface{}{
+	a.logger.Info(ctx, "Transport authorization request received", map[string]interface{}{
 		"request_id":  req.RequestID,
 		"timestamp":   req.Timestamp,
 		"source_ip":   req.SourceIP,
@@ -31,21 +31,137 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 		"dest_ip":     req.DestIP,
 		"dest_port":   req.DestPort,
 		"protocol":    req.Protocol,
-		"http_method": req.HTTPMethod,
-		"http_path":   req.HTTPPath,
 	})
 
-	// Log all HTTP headers
-	if len(req.HTTPHeaders) > 0 {
-		a.logger.Info(ctx, "TransportAuthorizer: HTTP Headers", map[string]interface{}{
-			"headers": req.HTTPHeaders,
+	// Resolve source IP to FQDN
+	sourceFQDN, err := a.resolveIPToFQDN(ctx, req.SourceIP)
+	if err != nil {
+		a.logger.Warn(ctx, "Failed to resolve source IP to FQDN", map[string]interface{}{
+			"source_ip": req.SourceIP,
+			"error":     err.Error(),
 		})
+		return &auth.AuthResponse{
+			Decision:      auth.DecisionDeny,
+			Reason:        fmt.Sprintf("Failed to resolve source IP %s to FQDN: %s", req.SourceIP, err.Error()),
+			DeniedStatus:  403,
+			DeniedMessage: "Forbidden - Source host resolution failed",
+		}, nil
 	}
 
-	// For now, just allow all requests and log the information
+	// Resolve destination IP to FQDN
+	destFQDN, err := a.resolveIPToFQDN(ctx, req.DestIP)
+	if err != nil {
+		a.logger.Warn(ctx, "Failed to resolve destination IP to FQDN", map[string]interface{}{
+			"dest_ip": req.DestIP,
+			"error":   err.Error(),
+		})
+		return &auth.AuthResponse{
+			Decision:      auth.DecisionDeny,
+			Reason:        fmt.Sprintf("Failed to resolve destination IP %s to FQDN: %s", req.DestIP, err.Error()),
+			DeniedStatus:  403,
+			DeniedMessage: "Forbidden - Destination host resolution failed",
+		}, nil
+	}
+
+	a.logger.Info(ctx, "Resolved IPs to FQDNs", map[string]interface{}{
+		"source_ip":   req.SourceIP,
+		"source_fqdn": sourceFQDN,
+		"dest_ip":     req.DestIP,
+		"dest_fqdn":   destFQDN,
+	})
+
+	// Get source host security context
+	sourceSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, sourceFQDN)
+	if err != nil {
+		a.logger.Error(ctx, "Failed to get source host security context", map[string]interface{}{
+			"fqdn":  sourceFQDN,
+			"error": err.Error(),
+		})
+		return &auth.AuthResponse{
+			Decision:      auth.DecisionDeny,
+			Reason:        fmt.Sprintf("Failed to retrieve source host security context: %s", err.Error()),
+			DeniedStatus:  403,
+			DeniedMessage: "Forbidden - MAC context unavailable",
+		}, nil
+	}
+
+	a.logger.Debug(ctx, "Source host security context retrieved", map[string]interface{}{
+		"fqdn":         sourceFQDN,
+		"level":        sourceSecCtx.Level,
+		"categories":   fmt.Sprintf("0x%x", sourceSecCtx.Categories),
+		"capabilities": sourceSecCtx.Capabilities,
+		"integrity":    fmt.Sprintf("0x%x", sourceSecCtx.Integrity),
+	})
+
+	// Get destination host security context
+	destSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, destFQDN)
+	if err != nil {
+		a.logger.Error(ctx, "Failed to get destination host security context", map[string]interface{}{
+			"fqdn":  destFQDN,
+			"error": err.Error(),
+		})
+		return &auth.AuthResponse{
+			Decision:      auth.DecisionDeny,
+			Reason:        fmt.Sprintf("Failed to retrieve destination host security context: %s", err.Error()),
+			DeniedStatus:  403,
+			DeniedMessage: "Forbidden - MAC context unavailable",
+		}, nil
+	}
+
+	a.logger.Debug(ctx, "Destination host security context retrieved", map[string]interface{}{
+		"fqdn":         destFQDN,
+		"level":        destSecCtx.Level,
+		"categories":   fmt.Sprintf("0x%x", destSecCtx.Categories),
+		"capabilities": destSecCtx.Capabilities,
+		"integrity":    fmt.Sprintf("0x%x", destSecCtx.Integrity),
+	})
+
+	// Perform MAC authorization check (host-to-host)
+	// For transport layer, we treat all connections as read operations
+	allowed, reason := checkMACAccess(sourceSecCtx, destSecCtx, false)
+	if !allowed {
+		a.logger.Warn(ctx, "MAC authorization denied", map[string]interface{}{
+			"source_fqdn": sourceFQDN,
+			"dest_fqdn":   destFQDN,
+			"reason":      reason,
+		})
+		return &auth.AuthResponse{
+			Decision:      auth.DecisionDeny,
+			Reason:        reason,
+			DeniedStatus:  403,
+			DeniedMessage: "Forbidden - MAC policy violation",
+		}, nil
+	}
+
+	a.logger.Info(ctx, "MAC authorization granted", map[string]interface{}{
+		"source_fqdn": sourceFQDN,
+		"dest_fqdn":   destFQDN,
+		"reason":      reason,
+	})
+
 	return &auth.AuthResponse{
 		Decision: auth.DecisionAllow,
-		Reason:   fmt.Sprintf("Transport authorization: request from %s:%d to %s:%d", req.SourceIP, req.SourcePort, req.DestIP, req.DestPort),
+		Reason:   fmt.Sprintf("Transport authorization successful from %s to %s", sourceFQDN, destFQDN),
 		Headers:  map[string]string{},
 	}, nil
+}
+
+// resolveIPToFQDN performs reverse DNS lookup to resolve IP address to FQDN
+func (a *TransportAuthorizer) resolveIPToFQDN(ctx context.Context, ip string) (string, error) {
+	names, err := net.LookupAddr(ip)
+	if err != nil {
+		return "", fmt.Errorf("reverse DNS lookup failed: %w", err)
+	}
+
+	if len(names) == 0 {
+		return "", fmt.Errorf("no FQDN found for IP %s", ip)
+	}
+
+	// Return the first FQDN, removing trailing dot if present
+	fqdn := names[0]
+	if len(fqdn) > 0 && fqdn[len(fqdn)-1] == '.' {
+		fqdn = fqdn[:len(fqdn)-1]
+	}
+
+	return fqdn, nil
 }

@@ -1,4 +1,5 @@
 .env
+.$*
 # Compiled WASM
 *.wasm
 *.drawio
