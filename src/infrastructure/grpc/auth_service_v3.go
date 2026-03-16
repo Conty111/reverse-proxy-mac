@@ -61,8 +61,15 @@ func (s *AuthServiceV3) convertToAuthRequest(req *envoy_auth.CheckRequest) *auth
 		authReq.DestPort = int32(dest.GetAddress().GetSocketAddress().GetPortValue())
 	}
 
+	// Copy headers from Envoy request
 	for k, v := range httpReq.GetHeaders() {
 		authReq.HTTPHeaders[k] = v
+	}
+
+	// Envoy sends Host header as httpReq.Host field, not in headers map
+	// Add it to headers for easier access
+	if httpReq.GetHost() != "" {
+		authReq.HTTPHeaders["host"] = httpReq.GetHost()
 	}
 
 	return authReq

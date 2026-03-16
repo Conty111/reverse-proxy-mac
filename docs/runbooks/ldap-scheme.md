@@ -11,16 +11,31 @@
     systemctl restart dirsrv@ALD-COMPANY-LAN.service
     ```
 
-Назначить созданные ранее атрибуты узла можно следующей командой (заменив `${host}` на FQDN узла в домене):
+Назначить созданные ранее атрибуты узла можно следующими командами (заменив `${TARGET_HOST}` на FQDN узла в домене):
 
 ```bash
-ipa host-mod ${host} \
-  --addattr=x-ald-host-mac="2:0x1:0:0x0" \
-  --addattr=x-ald-host-mic-level=0x3F \
-  --addattr=x-ald-host-caps=0
+ipa host-mod ${TARGET_HOST} \
+  --addattr=objectClass=aldHostContext
+ipa host-mod ${TARGET_HOST} \
+  --addattr=x-ald-host-mac="2:0x1:0:0x0"
 ```
 
-Формат атрибутов аналогичен формату атрибутов пользователей `x-ald-user-mac`, `x-ald-user-mic-level` и `x-ald-user-caps`
+Формат атрибута аналогичен формату атрибутов пользователей `x-ald-user-mac`:
+
+```bash
+level:categories:capabilities:integrity
+```
+
+### Выдать права на чтение
+
+Для работы с созданными ранее атрибутами требуется выдать разрешения. Например, выдать разрешение на чтение, поиск и сравнени атрибутов для всех можно так:
+```bash
+ipa permission-add "Read custom host security context" \
+  --type=host \
+  --right={read,search,compare} \
+  --attrs=x-ald-host-mac \
+  --bindtype=all
+```
 
 ## Создание новой сущности
 

@@ -1,13 +1,5 @@
 package auth
 
-type UserHTTPSecurityContext struct {
-	RequestMethod string
-	Categories uint64
-	Level uint8
-	Capabilities uint64
-	Integrity uint32
-}
-
 const (
 	UserMacAttribute = "x-ald-user-mac"
 	UserCapabilitiesAttribute = "x-ald-user-caps"
@@ -36,3 +28,20 @@ var AllMacUserAttributes []string = []string{
 	"xaldusermacmax",
 	"xaldusermacmin",
 }
+
+type UserHTTPSecurityContext struct {
+	RequestMethod string
+	Categories uint64
+	Level uint8
+	Capabilities uint64
+	Integrity uint32
+}
+
+
+func (usc *UserHTTPSecurityContext) GetLevel() uint8 { return usc.Level }
+
+func (usc *UserHTTPSecurityContext) GetCategories() uint64 { return usc.Categories }
+
+func (usc *UserHTTPSecurityContext) GetCapabilities() uint64 { return usc.Capabilities }
+
+func (usc *UserHTTPSecurityContext) GetIntegrity() uint32 { return usc.Integrity }

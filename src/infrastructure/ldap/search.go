@@ -55,5 +55,18 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 		})
 	}
 
-	return result.Entries[0], nil
+	// Log all attributes returned from LDAP for debugging
+	entry := result.Entries[0]
+	attrs := make(map[string]interface{})
+	for _, attr := range entry.Attributes {
+		if len(attr.Values) > 0 {
+			attrs[attr.Name] = attr.Values
+		}
+	}
+	cl.Logger.Debug(ctx, "LDAP entry attributes", map[string]interface{}{
+		"dn":         entry.DN,
+		"attributes": attrs,
+	})
+
+	return entry, nil
 }
