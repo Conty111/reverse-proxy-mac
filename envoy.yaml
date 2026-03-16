@@ -29,7 +29,6 @@ static_resources:
                 envoy_grpc:
                   cluster_name: ext_authz
                 timeout: 5s
-              # Pass all request headers to the authorization service
               clear_route_cache: true
               failure_mode_allow: false
               include_peer_certificate: true
