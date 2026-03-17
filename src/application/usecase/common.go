@@ -128,15 +128,15 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 
 	return &auth.HostSecurityContext{
 		Categories:   categories,
-		Level:        level,
+		Confidentiality:        level,
 		Capabilities: capabilities,
 		Integrity:    integrityLevel,
 	}, nil
 }
 
 func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool) (bool, string) {
-	objectLevel := object.GetLevel()
-	userLevel := subject.GetLevel()
+	objectLevel := object.GetConfidentiality()
+	userLevel := subject.GetConfidentiality()
 
 	if isWriteOperation {
 		// Write operations: user level must equal host level

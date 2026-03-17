@@ -8,18 +8,18 @@ const (
 
 var AllMacHostAttributes []string = []string{
 	HostMacAttribute,
-	HostCapabilitiesAttribute,
-	HostIntegrityLevelAttribute,
+	// HostCapabilitiesAttribute,
+	// HostIntegrityLevelAttribute,
 }
 
 type HostSecurityContext struct {
 	Categories   uint64
-	Level        uint8
+	Confidentiality        uint8
 	Capabilities uint64
 	Integrity    uint32
 }
 
-func (hsc *HostSecurityContext) GetLevel() uint8 { return hsc.Level }
+func (hsc *HostSecurityContext) GetConfidentiality() uint8 { return hsc.Confidentiality }
 
 func (hsc *HostSecurityContext) GetCategories() uint64 { return hsc.Categories }
 

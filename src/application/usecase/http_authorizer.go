@@ -78,7 +78,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 
 	a.logger.Debug(ctx, "User security context retrieved", map[string]interface{}{
 		"principal":    principal,
-		"level":        userSecCtx.Level,
+		"level":        userSecCtx.Confidentiality,
 		"categories":   fmt.Sprintf("0x%x", userSecCtx.Categories),
 		"capabilities": userSecCtx.Capabilities,
 		"integrity":    fmt.Sprintf("0x%x", userSecCtx.Integrity),
@@ -113,7 +113,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 
 	a.logger.Debug(ctx, "Host security context retrieved", map[string]interface{}{
 		"fqdn":         hostFQDN,
-		"level":        hostSecCtx.Level,
+		"level":        hostSecCtx.Confidentiality,
 		"categories":   fmt.Sprintf("0x%x", hostSecCtx.Categories),
 		"capabilities": hostSecCtx.Capabilities,
 		"integrity":    fmt.Sprintf("0x%x", hostSecCtx.Integrity),
@@ -220,7 +220,7 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 	return &auth.UserHTTPSecurityContext{
 		RequestMethod: httpMethod,
 		Categories:    categories,
-		Level:         level,
+		Confidentiality:         level,
 		Capabilities:  capabilities,
 		Integrity:     integrityLevel,
 	}, nil

@@ -87,7 +87,7 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 
 	a.logger.Debug(ctx, "Source host security context retrieved", map[string]interface{}{
 		"fqdn":         sourceFQDN,
-		"level":        sourceSecCtx.Level,
+		"level":        sourceSecCtx.Confidentiality,
 		"categories":   fmt.Sprintf("0x%x", sourceSecCtx.Categories),
 		"capabilities": sourceSecCtx.Capabilities,
 		"integrity":    fmt.Sprintf("0x%x", sourceSecCtx.Integrity),
@@ -110,7 +110,7 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 
 	a.logger.Debug(ctx, "Destination host security context retrieved", map[string]interface{}{
 		"fqdn":         destFQDN,
-		"level":        destSecCtx.Level,
+		"level":        destSecCtx.Confidentiality,
 		"categories":   fmt.Sprintf("0x%x", destSecCtx.Categories),
 		"capabilities": destSecCtx.Capabilities,
 		"integrity":    fmt.Sprintf("0x%x", destSecCtx.Integrity),
