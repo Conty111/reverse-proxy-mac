@@ -1,8 +1,8 @@
 package auth
 
 const (
-	HostMacAttribute = "x-ald-host-mac"
-	HostCapabilitiesAttribute = "x-ald-host-caps"
+	HostMacAttribute            = "x-ald-host-mac"
+	HostCapabilitiesAttribute   = "x-ald-host-caps"
 	HostIntegrityLevelAttribute = "x-ald-host-mic-level"
 )
 
@@ -13,10 +13,10 @@ var AllMacHostAttributes []string = []string{
 }
 
 type HostSecurityContext struct {
-	Categories uint64
-	Level uint8
+	Categories   uint64
+	Level        uint8
 	Capabilities uint64
-	Integrity uint32
+	Integrity    uint32
 }
 
 func (hsc *HostSecurityContext) GetLevel() uint8 { return hsc.Level }

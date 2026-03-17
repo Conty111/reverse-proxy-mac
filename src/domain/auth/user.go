@@ -1,8 +1,8 @@
 package auth
 
 const (
-	UserMacAttribute = "x-ald-user-mac"
-	UserCapabilitiesAttribute = "x-ald-user-caps"
+	UserMacAttribute            = "x-ald-user-mac"
+	UserCapabilitiesAttribute   = "x-ald-user-caps"
 	UserIntegrityLevelAttribute = "x-ald-user-mic-level"
 )
 
@@ -31,12 +31,11 @@ var AllMacUserAttributes []string = []string{
 
 type UserHTTPSecurityContext struct {
 	RequestMethod string
-	Categories uint64
-	Level uint8
-	Capabilities uint64
-	Integrity uint32
+	Categories    uint64
+	Level         uint8
+	Capabilities  uint64
+	Integrity     uint32
 }
-
 
 func (usc *UserHTTPSecurityContext) GetLevel() uint8 { return usc.Level }
 

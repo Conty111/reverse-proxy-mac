@@ -22,9 +22,9 @@ func parseMacLabel(mac string) (level uint8, cats uint64, caps uint64, integrity
 	if len(parts) != 4 {
 		return 0, 0, 0, 0, fmt.Errorf("invalid MAC label '%s': expected format level:cats:caps:integrity", mac)
 	}
-	
+
 	var levelTmp, integrityTmp uint64
-	
+
 	if _, err := fmt.Sscanf(parts[0], "%d", &levelTmp); err != nil || levelTmp > 255 {
 		return 0, 0, 0, 0, fmt.Errorf("invalid level '%s': %w", parts[0], err)
 	}
@@ -37,27 +37,8 @@ func parseMacLabel(mac string) (level uint8, cats uint64, caps uint64, integrity
 	if _, err := fmt.Sscanf(parts[3], "%x", &integrityTmp); err != nil || integrityTmp > 0xFFFFFFFF {
 		return 0, 0, 0, 0, fmt.Errorf("invalid integrity '%s': %w", parts[3], err)
 	}
-	
-	return uint8(levelTmp), cats, caps, uint32(integrityTmp), nil
-}
 
-// parseHexBitmask parses a hexadecimal bitmask string (e.g., "0x3F", "0x1A")
-// and returns it as an integer value
-func parseHexBitmask(hexStr string) (int, error) {
-	if hexStr == "" {
-		return 0, nil
-	}
-	
-	// Remove "0x" or "0X" prefix if present
-	hexStr = strings.TrimPrefix(strings.TrimPrefix(hexStr, "0x"), "0X")
-	
-	var value int
-	_, err := fmt.Sscanf(hexStr, "%x", &value)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse hex bitmask '%s': %w", hexStr, err)
-	}
-	
-	return value, nil
+	return uint8(levelTmp), cats, caps, uint32(integrityTmp), nil
 }
 
 // validateHTTPMethod validates that the HTTP method is one of the standard methods
@@ -73,16 +54,16 @@ func validateHTTPMethod(method string) error {
 		"TRACE":   true,
 		"CONNECT": true,
 	}
-	
+
 	if method == "" {
 		return fmt.Errorf("HTTP method cannot be empty")
 	}
-	
+
 	upperMethod := strings.ToUpper(method)
 	if !validMethods[upperMethod] {
 		return fmt.Errorf("invalid HTTP method: %s", method)
 	}
-	
+
 	return nil
 }
 
@@ -90,15 +71,15 @@ func validateHTTPMethod(method string) error {
 // The Host header may contain port number (e.g., "example.com:8080"), which is stripped
 func extractHostFromRequest(req *auth.AuthRequest) (string, error) {
 	hostHeader, hasHostHeader := req.HTTPHeaders["host"]
-	
+
 	if !hasHostHeader {
-		return "", fmt.Errorf("Host header not present in request") 
+		return "", fmt.Errorf("host header not present in request")
 	}
 
 	if hostHeader == "" {
-		return "", fmt.Errorf("Host header is empty")
+		return "", fmt.Errorf("host header is empty")
 	}
-	
+
 	// Remove port if present (e.g., "example.com:8080" -> "example.com")
 	host := hostHeader
 	if colonIndex := strings.LastIndex(hostHeader, ":"); colonIndex != -1 {
@@ -111,23 +92,23 @@ func extractHostFromRequest(req *auth.AuthRequest) (string, error) {
 			host = hostHeader[:colonIndex]
 		}
 	}
-	
+
 	host = strings.TrimSpace(host)
-	
+
 	if host == "" {
 		return "", fmt.Errorf("invalid Host header format: %s", hostHeader)
 	}
-	 
+
 	return host, nil
 }
 
 func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (*auth.HostSecurityContext, error) {
 	hostEntry, err := cl.Search(ctx, fmt.Sprintf("(fqdn=%s)", fqdn), auth.AllMacHostAttributes)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to search host in LDAP: %w", err)
+		return nil, fmt.Errorf("failed to search host in LDAP: %w", err)
 	}
 	if hostEntry == nil {
-		return nil, fmt.Errorf("Host not found")
+		return nil, fmt.Errorf("host not found")
 	}
 
 	var level uint8
@@ -137,19 +118,19 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 
 	macValue := hostEntry.GetAttributeValue(auth.HostMacAttribute)
 	if macValue == "" {
-		return nil, fmt.Errorf("Host MAC attribute '%s' is empty or not found", auth.HostMacAttribute)
+		return nil, fmt.Errorf("host MAC attribute '%s' is empty or not found", auth.HostMacAttribute)
 	}
-	
+
 	level, categories, capabilities, integrityLevel, err = parseMacLabel(macValue)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse MAC label for host: %w", err)
+		return nil, fmt.Errorf("failed to parse MAC label for host: %w", err)
 	}
 
 	return &auth.HostSecurityContext{
-		Categories: categories,
-		Level: level,
+		Categories:   categories,
+		Level:        level,
 		Capabilities: capabilities,
-		Integrity: integrityLevel,
+		Integrity:    integrityLevel,
 	}, nil
 }
 
@@ -170,30 +151,30 @@ func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool)
 				userLevel, objectLevel)
 		}
 	}
-	
+
 	// User must have all categories that the host requires
 	// Categories are represented as bitmasks
 	requiredCategories := object.GetCategories()
 	userCategories := subject.GetCategories()
-	
+
 	// Check if user has all required categories (bitwise AND should equal required categories)
 	if (userCategories & requiredCategories) != requiredCategories {
 		return false, fmt.Sprintf("MAC: access denied - user categories 0x%x do not include all required categories 0x%x",
 			userCategories, requiredCategories)
 	}
-	
+
 	// Check integrity level (MIC - Mandatory Integrity Control)
 	// User's integrity level must be >= host's integrity level
 	if subject.GetIntegrity() < object.GetIntegrity() {
 		return false, fmt.Sprintf("MAC: access denied - user integrity 0x%x < host integrity 0x%x",
 			subject.GetIntegrity(), object.GetIntegrity())
 	}
-	
+
 	// Check capabilities
 	// User must have all capabilities that the host requires
 	requiredCapabilities := object.GetCapabilities()
 	userCapabilities := subject.GetCapabilities()
-	
+
 	if (userCapabilities & requiredCapabilities) != requiredCapabilities {
 		return false, fmt.Sprintf("MAC: access denied - user capabilities 0x%x do not include all required capabilities 0x%x",
 			userCapabilities, requiredCapabilities)

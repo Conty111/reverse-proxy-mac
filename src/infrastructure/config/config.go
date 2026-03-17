@@ -25,12 +25,12 @@ type LogConfig struct {
 }
 
 type LDAPConfig struct {
-	TLS                bool   `json:"tls"`
-	Port               int    `json:"port"`
-	Host               string `json:"host"`
-	TLSSkipVerify      bool   `json:"tls_skip_verify"`
-	TLSCACertFile      string `json:"tls_ca_cert_file"`
-	Kerberos           KerberosConfig `json:"kerberos"`
+	TLS           bool           `json:"tls"`
+	Port          int            `json:"port"`
+	Host          string         `json:"host"`
+	TLSSkipVerify bool           `json:"tls_skip_verify"`
+	TLSCACertFile string         `json:"tls_ca_cert_file"`
+	Kerberos      KerberosConfig `json:"kerberos"`
 }
 
 type KerberosConfig struct {

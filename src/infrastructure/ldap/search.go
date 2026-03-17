@@ -18,13 +18,13 @@ func realmToDN(realm string) string {
 }
 
 func (cl *Client) Search(ctx context.Context, filter string, attributes []string) (*ldap.Entry, error) {
-	baseDN := fmt.Sprintf("%s", realmToDN(cl.kerberosRealm))
+	baseDN := realmToDN(cl.kerberosRealm)
 
 	cl.Logger.Info(ctx, "Search request in LDAP", map[string]interface{}{
-			"filter":   filter,
-			"basedn": baseDN,
-			"attributes": attributes,
-		})
+		"filter":     filter,
+		"basedn":     baseDN,
+		"attributes": attributes,
+	})
 	searchRequest := ldap.NewSearchRequest(
 		baseDN,
 		ldap.ScopeWholeSubtree,
@@ -39,7 +39,7 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 	result, err := cl.ldapConnection.Search(searchRequest)
 	if err != nil {
 		cl.Logger.Error(ctx, "LDAP search request failed", map[string]interface{}{
-			"error":    err.Error(),
+			"error": err.Error(),
 		})
 		return nil, fmt.Errorf("LDAP search failed: %w", err)
 	}
@@ -51,7 +51,7 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 
 	if len(result.Entries) > 1 {
 		cl.Logger.Warn(ctx, "Multiple LDAP entries found", map[string]interface{}{
-			"count":    len(result.Entries),
+			"count": len(result.Entries),
 		})
 	}
 

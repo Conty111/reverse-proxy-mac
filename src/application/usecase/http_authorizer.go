@@ -36,7 +36,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 	tokenStr := strings.TrimPrefix(authHeader, "Negotiate ")
 	tokenBytes, err := base64.StdEncoding.DecodeString(tokenStr)
 	if err != nil {
-		a.logger.Error(ctx, "Failed to decode Kerberos token", map[string]interface{}{"error": err.Error()})
+		a.logger.Error(ctx, "failed to decode Kerberos token", map[string]interface{}{"error": err.Error()})
 		return a.createUnauthorizedResponse(), nil
 	}
 
@@ -87,7 +87,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 	hostFQDN, err := extractHostFromRequest(req)
 	if err != nil {
 		a.logger.Warn(ctx, "Failed to extract host FQDN from the request", map[string]interface{}{
-			"error":       err.Error(),
+			"error": err.Error(),
 		})
 		return &auth.AuthResponse{
 			Decision:      auth.DecisionDeny,
@@ -171,9 +171,7 @@ func checkAccessHTTP(userCtx *auth.UserHTTPSecurityContext, hostCtx *auth.HostSe
 		userCtx.RequestMethod == "PUT" ||
 		userCtx.RequestMethod == "DELETE" ||
 		userCtx.RequestMethod == "PATCH"
-	
-	
-	
+
 	allowed, msg := checkMACAccess(userCtx, hostCtx, isWriteOperation)
 	if !allowed {
 		return allowed, msg
@@ -187,22 +185,22 @@ func checkAccessHTTP(userCtx *auth.UserHTTPSecurityContext, hostCtx *auth.HostSe
 func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, httpMethod string) (*auth.UserHTTPSecurityContext, error) {
 
 	if err := validateHTTPMethod(httpMethod); err != nil {
-		return nil, fmt.Errorf("Invalid HTTP method: %w", err)
+		return nil, fmt.Errorf("invalid HTTP method: %w", err)
 	}
 
 	userEntry, err := cl.Search(ctx, fmt.Sprintf("(uid=%s)", username), auth.AllMacUserAttributes)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to search user in LDAP: %w", err)
+		return nil, fmt.Errorf("failed to search user in LDAP: %w", err)
 	}
 	if userEntry == nil {
-		return nil, fmt.Errorf("User not found")
+		return nil, fmt.Errorf("user not found")
 	}
 
 	attrs := make(map[string]interface{})
 	for _, attr := range userEntry.Attributes {
 		attrs[attr.Name] = attr.Values
 	}
-	cl.Logger.Debug(ctx, "User found in LDAP", attrs)
+	cl.Logger.Debug(ctx, "user found in LDAP", attrs)
 
 	var level uint8
 	var categories uint64
@@ -211,19 +209,19 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 
 	macValue := userEntry.GetAttributeValue(auth.UserMacAttribute)
 	if macValue == "" {
-		return nil, fmt.Errorf("User MAC attribute '%s' is empty or not found", auth.UserMacAttribute)
+		return nil, fmt.Errorf("user MAC attribute '%s' is empty or not found", auth.UserMacAttribute)
 	}
 
 	level, categories, capabilities, integrityLevel, err = parseMacLabel(macValue)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse MAC label for user: %w", err)
+		return nil, fmt.Errorf("failed to parse MAC label for user: %w", err)
 	}
 
 	return &auth.UserHTTPSecurityContext{
 		RequestMethod: httpMethod,
-		Categories: categories,
-		Level: level,
-		Capabilities: capabilities,
-		Integrity: integrityLevel,
+		Categories:    categories,
+		Level:         level,
+		Capabilities:  capabilities,
+		Integrity:     integrityLevel,
 	}, nil
 }

@@ -112,7 +112,7 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 		})
 		return nil, fmt.Errorf("failed to dial LDAP server: %w", err)
 	}
-	
+
 	targetSPN := fmt.Sprintf("ldap/%s", cl.host)
 
 	cl.Logger.Debug(context.Background(), "Attempting GSSAPI bind", map[string]interface{}{
@@ -120,7 +120,7 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 		"target_spn":       targetSPN,
 		"host":             cl.host,
 	})
-	
+
 	err = conn.GSSAPIBind(cl.gssApiClient, targetSPN, "")
 	if err != nil {
 		cl.Logger.Error(context.Background(), "GSSAPI bind failed", map[string]interface{}{
