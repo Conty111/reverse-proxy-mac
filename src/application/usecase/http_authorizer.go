@@ -202,26 +202,21 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 	}
 	cl.Logger.Debug(ctx, "user found in LDAP", attrs)
 
-	var level uint8
-	var categories uint64
-	var capabilities uint64
-	var integrityLevel uint32
-
 	macValue := userEntry.GetAttributeValue(auth.UserMacAttribute)
 	if macValue == "" {
 		return nil, fmt.Errorf("user MAC attribute '%s' is empty or not found", auth.UserMacAttribute)
 	}
 
-	level, categories, capabilities, integrityLevel, err = parseMacLabel(macValue)
+	label, err := parseMacLabel(macValue)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse MAC label for user: %w", err)
 	}
 
 	return &auth.UserHTTPSecurityContext{
-		RequestMethod: httpMethod,
-		Categories:    categories,
-		Confidentiality:         level,
-		Capabilities:  capabilities,
-		Integrity:     integrityLevel,
+		RequestMethod:   httpMethod,
+		Categories:      label.Categories,
+		Confidentiality: label.Confidentiality,
+		Capabilities:    label.Capabilities,
+		Integrity:       label.Integrity,
 	}, nil
 }

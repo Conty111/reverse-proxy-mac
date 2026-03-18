@@ -1,11 +1,11 @@
 package auth
 
 type URLSecurityContext struct {
-	Path         string
-	Categories   uint64
-	Level        uint8
-	Capabilities uint64
-	Integrity    uint32
+	Path            string
+	Categories      uint64
+	Confidentiality uint8
+	Capabilities    uint64
+	Integrity       uint32
 }
 
 const (
@@ -21,3 +21,11 @@ var AllMacURLAttributes []string = []string{
 	URLCapabilitiesAttribute,
 	URLIntegrityLevelAttribute,
 }
+
+func (urlsc *URLSecurityContext) GetConfidentiality() uint8 { return urlsc.Confidentiality }
+
+func (urlsc *URLSecurityContext) GetCategories() uint64 { return urlsc.Categories }
+
+func (urlsc *URLSecurityContext) GetCapabilities() uint64 { return urlsc.Capabilities }
+
+func (urlsc *URLSecurityContext) GetIntegrity() uint32 { return urlsc.Integrity }

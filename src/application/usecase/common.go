@@ -3,42 +3,59 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"reverse-proxy-mac/src/domain/auth"
 	"reverse-proxy-mac/src/infrastructure/ldap"
 )
 
+type macLabel struct {
+	Confidentiality uint8
+	Categories      uint64
+	Integrity       uint32
+	Capabilities    uint64
+}
+
 // parseMacLabel parses a MAC (Mandatory Access Control) label string in the format:
-// "level:categories:capabilities:integrity" where:
-//   - level: decimal uint8 (0-255)
+// "confidentiality:categories:capabilities:integrity" where:
+//   - confidentiality: decimal uint8 (0-255)
 //   - categories: hexadecimal uint64 (e.g., 0x3F)
 //   - capabilities: decimal uint64
 //   - integrity: hexadecimal uint32 (e.g., 0x1A)
 //
-// Example: "2:3F:100:1A" represents level=2, categories=0x3F, capabilities=100, integrity=0x1A
-func parseMacLabel(mac string) (level uint8, cats uint64, caps uint64, integrity uint32, err error) {
+// Example: "2:3F:100:1A" represents confidentiality=2, categories=0x3F, capabilities=100, integrity=0x1A
+func parseMacLabel(mac string) (*macLabel, error) {
+	var label macLabel
+
 	parts := strings.Split(mac, ":")
 	if len(parts) != 4 {
-		return 0, 0, 0, 0, fmt.Errorf("invalid MAC label '%s': expected format level:cats:caps:integrity", mac)
+		return nil, fmt.Errorf("invalid MAC label '%s': expected format confidentiality:cats:caps:integrity", mac)
 	}
 
-	var levelTmp, integrityTmp uint64
+	var confidentialityTmp, integrityTmp uint64
 
-	if _, err := fmt.Sscanf(parts[0], "%d", &levelTmp); err != nil || levelTmp > 255 {
-		return 0, 0, 0, 0, fmt.Errorf("invalid level '%s': %w", parts[0], err)
+	_, err := fmt.Sscanf(parts[0], "%d", &confidentialityTmp)
+	if err != nil || confidentialityTmp > 255 {
+		return nil, fmt.Errorf("invalid confidentiality '%s': %w", parts[0], err)
 	}
-	if _, err := fmt.Sscanf(parts[1], "%x", &cats); err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("invalid categories '%s': %w", parts[1], err)
-	}
-	if _, err := fmt.Sscanf(parts[2], "%d", &caps); err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("invalid capabilities '%s': %w", parts[2], err)
-	}
-	if _, err := fmt.Sscanf(parts[3], "%x", &integrityTmp); err != nil || integrityTmp > 0xFFFFFFFF {
-		return 0, 0, 0, 0, fmt.Errorf("invalid integrity '%s': %w", parts[3], err)
+	label.Confidentiality = uint8(confidentialityTmp)
+
+	if _, err := fmt.Sscanf(parts[1], "%x", &label.Categories); err != nil {
+		return nil, fmt.Errorf("invalid categories '%s': %w", parts[1], err)
 	}
 
-	return uint8(levelTmp), cats, caps, uint32(integrityTmp), nil
+	if _, err := fmt.Sscanf(parts[2], "%d", &label.Capabilities); err != nil {
+		return nil, fmt.Errorf("invalid capabilities '%s': %w", parts[2], err)
+	}
+
+	_, err = fmt.Sscanf(parts[3], "%x", &integrityTmp)
+	if err != nil || integrityTmp > 0xFFFFFFFF {
+		return nil, fmt.Errorf("invalid integrity '%s': %w", parts[3], err)
+	}
+	label.Integrity = uint32(integrityTmp)
+
+	return &label, nil
 }
 
 // validateHTTPMethod validates that the HTTP method is one of the standard methods
@@ -80,26 +97,12 @@ func extractHostFromRequest(req *auth.AuthRequest) (string, error) {
 		return "", fmt.Errorf("host header is empty")
 	}
 
-	// Remove port if present (e.g., "example.com:8080" -> "example.com")
-	host := hostHeader
-	if colonIndex := strings.LastIndex(hostHeader, ":"); colonIndex != -1 {
-		// Check if it's IPv6 address (contains multiple colons)
-		if strings.Count(hostHeader, ":") > 1 {
-			// IPv6 address - remove brackets if present
-			host = strings.Trim(hostHeader, "[]")
-		} else {
-			// Regular hostname with port
-			host = hostHeader[:colonIndex]
-		}
+	host, err := url.Parse("http://" + hostHeader)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse host: %w", err)
 	}
 
-	host = strings.TrimSpace(host)
-
-	if host == "" {
-		return "", fmt.Errorf("invalid Host header format: %s", hostHeader)
-	}
-
-	return host, nil
+	return host.Hostname(), nil
 }
 
 func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (*auth.HostSecurityContext, error) {
@@ -111,26 +114,21 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 		return nil, fmt.Errorf("host not found")
 	}
 
-	var level uint8
-	var categories uint64
-	var capabilities uint64
-	var integrityLevel uint32
-
 	macValue := hostEntry.GetAttributeValue(auth.HostMacAttribute)
 	if macValue == "" {
 		return nil, fmt.Errorf("host MAC attribute '%s' is empty or not found", auth.HostMacAttribute)
 	}
 
-	level, categories, capabilities, integrityLevel, err = parseMacLabel(macValue)
+	label, err := parseMacLabel(macValue)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse MAC label for host: %w", err)
 	}
 
 	return &auth.HostSecurityContext{
-		Categories:   categories,
-		Confidentiality:        level,
-		Capabilities: capabilities,
-		Integrity:    integrityLevel,
+		Categories:      label.Categories,
+		Confidentiality: label.Confidentiality,
+		Capabilities:    label.Capabilities,
+		Integrity:       label.Integrity,
 	}, nil
 }
 

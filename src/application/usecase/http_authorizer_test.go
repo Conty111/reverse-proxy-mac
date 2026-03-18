@@ -18,7 +18,6 @@ type HTTPAuthorizerSuite struct {
 	suite.Suite
 }
 
-
 func (s *HTTPAuthorizerSuite) BeforeAll(t provider.T) {
 	t.Epic("HTTP Authorization")
 	t.Feature("Kerberos Authentication & MAC Authorization")
@@ -34,16 +33,16 @@ func (s *HTTPAuthorizerSuite) TestMissingAuthorizationHeader(t provider.T) {
 	t.WithNewStep("Create authorizer", func(sCtx provider.StepCtx) {
 		mockLog := &mockLogger{}
 		mockLDAP := &infraldap.Client{Logger: mockLog}
-		
+
 		authorizer, err := NewHTTPAuthorizer(mockLog, mockLDAP)
 		sCtx.Require().NoError(err)
 		sCtx.Require().NotNil(authorizer)
 
 		t.WithNewStep("Prepare request without Authorization header", func(sCtx provider.StepCtx) {
 			req := &auth.AuthRequest{
-				RequestID:   "test-001",
-				HTTPMethod:  "GET",
-				HTTPPath:    "/api/test",
+				RequestID:  "test-001",
+				HTTPMethod: "GET",
+				HTTPPath:   "/api/test",
 				HTTPHeaders: map[string]string{
 					"host": "example.com",
 				},
@@ -147,7 +146,7 @@ func (s *HTTPAuthorizerSuite) TestKerberosTicketVerificationFailed(t provider.T)
 
 	mockLog := &mockLogger{}
 	mockLDAPBase := &infraldap.Client{Logger: mockLog}
-	
+
 	authorizer := &HTTPAuthorizer{
 		logger:     mockLog,
 		ldapClient: mockLDAPBase,
@@ -198,7 +197,7 @@ func (s *HTTPAuthorizerSuite) TestExtractHostFromRequest(t provider.T) {
 			req := &auth.AuthRequest{
 				HTTPHeaders: map[string]string{},
 			}
-			
+
 			if tc.hostHeader != "" {
 				req.HTTPHeaders["host"] = tc.hostHeader
 			}
@@ -223,7 +222,7 @@ func (s *HTTPAuthorizerSuite) TestValidateHTTPMethod(t provider.T) {
 	t.Severity(allure.NORMAL)
 
 	validMethods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE", "CONNECT"}
-	
+
 	t.WithNewStep("Test valid methods", func(sCtx provider.StepCtx) {
 		for _, method := range validMethods {
 			err := validateHTTPMethod(method)

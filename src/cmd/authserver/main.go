@@ -17,17 +17,22 @@ import (
 )
 
 func main() {
+	if err := run(context.Background()); err != nil {
+		fmt.Fprint(os.Stderr, err.Error())
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context) error {
 	configPath := flag.String("config", "config.json", "Path to configuration file")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to load configuration: %v", err)
 	}
 
 	log := logging.NewConsoleLogger(cfg.Log.GetLogLevel(), cfg.Log.JSONFormat)
-	ctx := context.Background()
 
 	log.Info(ctx, "Starting mac-authserver", map[string]interface{}{
 		"config_path": *configPath,
@@ -41,22 +46,28 @@ func main() {
 	)
 	if err != nil {
 		log.Error(ctx, "Failed to initialize LDAP client", map[string]interface{}{"error": err.Error()})
-		os.Exit(1)
+		return err
 	}
+	defer func() {
+		// Close LDAP client
+		if err := ldapClient.Close(); err != nil {
+			log.Error(ctx, "Error closing LDAP client", map[string]interface{}{"error": err.Error()})
+		}
+	}()
 
 	httpAuthHandler, err := usecase.NewHTTPAuthorizer(
 		log,
 		ldapClient,
 	)
 	if err != nil {
-		log.Error(ctx, "Failed to initialize kerberosAuthHandler", map[string]interface{}{"error": err.Error()})
-		os.Exit(1)
+		log.Error(ctx, "Failed to initialize httpAuthHandler", map[string]interface{}{"error": err.Error()})
+		return err
 	}
 
 	transportAuthHandler, err := usecase.NewTransportAuthorizer(log, ldapClient)
 	if err != nil {
 		log.Error(ctx, "Failed to initialize transportAuthHandler", map[string]interface{}{"error": err.Error()})
-		os.Exit(1)
+		return err
 	}
 
 	httpAuthService := grpc.NewAuthServiceV3(httpAuthHandler, log)
@@ -66,7 +77,7 @@ func main() {
 
 	if err := grpcServer.Start(ctx); err != nil {
 		log.Error(ctx, "Failed to start gRPC server", map[string]interface{}{"error": err.Error()})
-		os.Exit(1)
+		return err
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -82,10 +93,6 @@ func main() {
 		log.Error(ctx, "Error stopping gRPC server", map[string]interface{}{"error": err.Error()})
 	}
 
-	// Close LDAP client
-	if err := ldapClient.Close(); err != nil {
-		log.Error(ctx, "Error closing LDAP client", map[string]interface{}{"error": err.Error()})
-	}
-
 	log.Info(ctx, "Service stopped successfully", nil)
+	return nil
 }

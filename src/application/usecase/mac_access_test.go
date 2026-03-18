@@ -21,7 +21,6 @@ func (s *MACAccessSuite) BeforeAll(t provider.T) {
 	t.Story("MAC Authorization")
 }
 
-
 // TestMACAuthorizationDeniedReadOperation tests MAC denial for read operations
 func (s *MACAccessSuite) TestMACAuthorizationDeniedReadOperation(t provider.T) {
 	t.Title("MAC Denied - Read Operation (User Level < Host Level)")
@@ -200,7 +199,7 @@ func (s *MACAccessSuite) TestSuccessfulMACAuthorizationWriteOperation(t provider
 	t.Severity(allure.BLOCKER)
 
 	writeMethods := []string{"POST", "PUT", "DELETE", "PATCH"}
-	
+
 	for _, method := range writeMethods {
 		t.WithNewStep("Test "+method+" method", func(sCtx provider.StepCtx) {
 			userCtx := &auth.UserHTTPSecurityContext{

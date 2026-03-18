@@ -47,6 +47,7 @@ test-open:
 	allure serve ./tests/allure-results
 
 test-all: test allure test-open
+	- echo "Completed"
 
 fmt:
 	@echo "Formatting code..."
@@ -90,7 +91,7 @@ clean-all: clean ## Clean all artifacts including Docker
 	$(DOCKER_COMPOSE) down -v --remove-orphans
 	docker rmi $(DOCKER_IMAGE):latest 2>/dev/null || true
 
-dev: fmt vet lint build
+dev: fmt vet lint build test
 
 vul:
 	govulncheck

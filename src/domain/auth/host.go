@@ -13,10 +13,10 @@ var AllMacHostAttributes []string = []string{
 }
 
 type HostSecurityContext struct {
-	Categories   uint64
-	Confidentiality        uint8
-	Capabilities uint64
-	Integrity    uint32
+	Categories      uint64
+	Confidentiality uint8
+	Capabilities    uint64
+	Integrity       uint32
 }
 
 func (hsc *HostSecurityContext) GetConfidentiality() uint8 { return hsc.Confidentiality }

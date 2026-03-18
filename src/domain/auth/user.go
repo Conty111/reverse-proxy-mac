@@ -30,11 +30,11 @@ var AllMacUserAttributes []string = []string{
 }
 
 type UserHTTPSecurityContext struct {
-	RequestMethod string
-	Categories    uint64
-	Confidentiality         uint8
-	Capabilities  uint64
-	Integrity     uint32
+	RequestMethod   string
+	Categories      uint64
+	Confidentiality uint8
+	Capabilities    uint64
+	Integrity       uint32
 }
 
 func (usc *UserHTTPSecurityContext) GetConfidentiality() uint8 { return usc.Confidentiality }
