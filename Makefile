@@ -29,13 +29,24 @@ run: ## Run the application locally
 	$(GO) run $(SRC_DIR)/main.go
 
 test:
-	@echo "Running tests..."
-	$(GO) test -v ./...
+	@echo "Running tests with Allure..."
+	mkdir -p ./tests/allure-results && rm -rf ./tests/allure-results/*
+	export ALLURE_OUTPUT_PATH=$(PWD)/tests && $(GO) test -coverprofile=./tests/coverage.out -v ./...
+	$(GO) tool cover -html=./tests/coverage.out -o ./tests/coverage.html
 
-test-coverage:
-	@echo "Running tests with coverage..."
-	$(GO) test -v -coverprofile=coverage.out ./...
-	$(GO) tool cover -html=coverage.out -o coverage.html
+allure:
+	@echo "Clearing Allure report dirs..."
+	mkdir -p ./tests/allure-report && rm -rf ./tests/allure-report/*
+	@echo "Generating Allure report..."
+	allure generate ./tests/allure-results --clean -o ./tests/allure-report
+
+test-open:
+	@echo "Opening tests coverage..."
+	open ./tests/coverage.html
+	@echo "Running Allure server..."
+	allure serve ./tests/allure-results
+
+test-all: test allure test-open
 
 fmt:
 	@echo "Formatting code..."
