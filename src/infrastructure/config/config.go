@@ -2,10 +2,21 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"reverse-proxy-mac/src/domain/logger"
+)
+
+// Default configuration values.
+const (
+	DefaultGRPCPort  = 9001
+	DefaultHost      = "0.0.0.0"
+	DefaultLogLevel  = "info"
+	DefaultLDAPPort  = 389
+	DefaultLDAPSPort = 636
 )
 
 type Config struct {
@@ -52,35 +63,71 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.setDefaults()
+
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
 	return &cfg, nil
 }
 
 func (c *Config) setDefaults() {
 	if c.Server.GRPCPort == 0 {
-		c.Server.GRPCPort = 9001
+		c.Server.GRPCPort = DefaultGRPCPort
 	}
 	if c.Server.Host == "" {
-		c.Server.Host = "0.0.0.0"
+		c.Server.Host = DefaultHost
 	}
 	if c.Log.Level == "" {
-		c.Log.Level = "info"
+		c.Log.Level = DefaultLogLevel
 	}
 	if c.LDAP.Port == 0 {
 		if c.LDAP.TLS {
-			c.LDAP.Port = 636
+			c.LDAP.Port = DefaultLDAPSPort
 		} else {
-			c.LDAP.Port = 389
+			c.LDAP.Port = DefaultLDAPPort
 		}
 	}
 }
 
+// Validate checks the configuration for required fields and valid values.
+func (c *Config) Validate() error {
+	var errs []string
+
+	if c.LDAP.Host == "" {
+		errs = append(errs, "ldap.host is required")
+	}
+
+	if c.LDAP.Kerberos.Keytab == "" {
+		errs = append(errs, "ldap.kerberos.keytab is required")
+	}
+
+	if c.LDAP.Kerberos.Principal == "" {
+		errs = append(errs, "ldap.kerberos.principal is required")
+	}
+
+	if c.LDAP.Kerberos.Realm == "" {
+		errs = append(errs, "ldap.kerberos.realm is required")
+	}
+
+	if c.Server.GRPCPort < 1 || c.Server.GRPCPort > 65535 {
+		errs = append(errs, "server.grpc_port must be between 1 and 65535")
+	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "; "))
+	}
+
+	return nil
+}
+
 func (c *LogConfig) GetLogLevel() logger.Level {
-	switch c.Level {
+	switch strings.ToLower(c.Level) {
 	case "debug":
 		return logger.LevelDebug
 	case "info":
 		return logger.LevelInfo
-	case "warn":
+	case "warn", "warning":
 		return logger.LevelWarn
 	case "error":
 		return logger.LevelError

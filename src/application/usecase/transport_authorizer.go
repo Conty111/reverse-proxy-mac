@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	"reverse-proxy-mac/src/domain/auth"
 	"reverse-proxy-mac/src/domain/logger"
@@ -146,11 +147,11 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 	}, nil
 }
 
-// resolveIPToFQDN performs reverse DNS lookup to resolve IP address to FQDN
-func (a *TransportAuthorizer) resolveIPToFQDN(ctx context.Context, ip string) (string, error) {
+// resolveIPToFQDN performs reverse DNS lookup to resolve IP address to FQDN.
+func (a *TransportAuthorizer) resolveIPToFQDN(_ context.Context, ip string) (string, error) {
 	names, err := net.LookupAddr(ip)
 	if err != nil {
-		return "", fmt.Errorf("reverse DNS lookup failed: %w", err)
+		return "", fmt.Errorf("reverse DNS lookup failed for %s: %w", ip, err)
 	}
 
 	if len(names) == 0 {
@@ -158,10 +159,5 @@ func (a *TransportAuthorizer) resolveIPToFQDN(ctx context.Context, ip string) (s
 	}
 
 	// Return the first FQDN, removing trailing dot if present
-	fqdn := names[0]
-	if len(fqdn) > 0 && fqdn[len(fqdn)-1] == '.' {
-		fqdn = fqdn[:len(fqdn)-1]
-	}
-
-	return fqdn, nil
+	return strings.TrimSuffix(names[0], "."), nil
 }

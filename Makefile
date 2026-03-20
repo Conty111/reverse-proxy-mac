@@ -46,8 +46,10 @@ test-open:
 	@echo "Running Allure server..."
 	allure serve ./tests/allure-results
 
-test-all: test allure test-open
-	- echo "Completed"
+test-all:
+	- make test
+	- make allure
+	- make test-open
 
 fmt:
 	@echo "Formatting code..."

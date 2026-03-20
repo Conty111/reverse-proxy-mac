@@ -160,32 +160,23 @@ func (a *HTTPAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {
 	}
 }
 
-// checkAccessHTTP performs Mandatory Access Control (MAC) authorization check
-// Based on Bell-LaPadula model: "no read up, no write down"
-// Returns true if access is allowed, false otherwise
+var writeHTTPMethods = map[string]struct{}{
+	"POST":   {},
+	"PUT":    {},
+	"DELETE": {},
+	"PATCH":  {},
+}
+
+// checkAccessHTTP performs Mandatory Access Control (MAC) authorization check.
+// Based on Bell-LaPadula model: "no read up, no write down".
 func checkAccessHTTP(userCtx *auth.UserHTTPSecurityContext, hostCtx *auth.HostSecurityContext) (bool, string) {
-	// Check level-based access control
-	// User's level must be >= host's level for read access
-	// For write operations (POST, PUT, DELETE, PATCH), user's level must equal host's level
-	isWriteOperation := userCtx.RequestMethod == "POST" ||
-		userCtx.RequestMethod == "PUT" ||
-		userCtx.RequestMethod == "DELETE" ||
-		userCtx.RequestMethod == "PATCH"
-
-	allowed, msg := checkMACAccess(userCtx, hostCtx, isWriteOperation)
-	if !allowed {
-		return allowed, msg
-	}
-
-	// TODO: get URL security context and check user access to URL
-
-	return allowed, msg
+	_, isWriteOperation := writeHTTPMethods[userCtx.RequestMethod]
+	return checkMACAccess(userCtx, hostCtx, isWriteOperation)
 }
 
 func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, httpMethod string) (*auth.UserHTTPSecurityContext, error) {
-
 	if err := validateHTTPMethod(httpMethod); err != nil {
-		return nil, fmt.Errorf("invalid HTTP method: %w", err)
+		return nil, err
 	}
 
 	userEntry, err := cl.Search(ctx, fmt.Sprintf("(uid=%s)", username), auth.AllMacUserAttributes)
@@ -193,10 +184,10 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 		return nil, fmt.Errorf("failed to search user in LDAP: %w", err)
 	}
 	if userEntry == nil {
-		return nil, fmt.Errorf("user not found")
+		return nil, errUserNotFound
 	}
 
-	attrs := make(map[string]interface{})
+	attrs := make(map[string]interface{}, len(userEntry.Attributes))
 	for _, attr := range userEntry.Attributes {
 		attrs[attr.Name] = attr.Values
 	}

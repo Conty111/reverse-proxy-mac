@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
-	"time"
+	"sync"
 
 	"github.com/go-ldap/ldap/v3"
 	"github.com/jcmturner/gokrb5/v8/keytab"
@@ -14,18 +14,6 @@ import (
 	"reverse-proxy-mac/src/domain/logger"
 	"reverse-proxy-mac/src/infrastructure/config"
 )
-
-// type LDAPClient interface {
-// 	SearchUser(ctx context.Context, username string, baseDN string) (*UserInfo, error)
-// 	VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (*credentials.Credentials, error)
-// 	Close() error
-// }
-
-type UserInfo struct {
-	UID  string
-	DN   string
-	Name string
-}
 
 type Client struct {
 	host              string
@@ -40,18 +28,17 @@ type Client struct {
 
 	gssApiClient   ldap.GSSAPIClient
 	ldapConnection *ldap.Conn
+	connMu         sync.RWMutex
 }
 
-func NewClient(cfg *config.LDAPConfig, logger logger.Logger) (*Client, error) {
-
+func NewClient(cfg *config.LDAPConfig, log logger.Logger) (*Client, error) {
 	c := &Client{
 		host:   cfg.Host,
 		port:   cfg.Port,
 		useTLS: cfg.TLS,
-		Logger: logger,
+		Logger: log,
 	}
 
-	// Configure TLS if enabled
 	if cfg.TLS {
 		tlsConfig, err := c.buildTLSConfig(cfg)
 		if err != nil {
@@ -61,7 +48,7 @@ func NewClient(cfg *config.LDAPConfig, logger logger.Logger) (*Client, error) {
 	}
 
 	if err := c.initKerberos(&cfg.Kerberos); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to initialize Kerberos: %w", err)
 	}
 
 	conn, err := c.connect()
@@ -73,27 +60,40 @@ func NewClient(cfg *config.LDAPConfig, logger logger.Logger) (*Client, error) {
 	return c, nil
 }
 
-// Close cleans up resources used by the LDAP client
+// Close cleans up resources used by the LDAP client.
 func (cl *Client) Close() error {
-	if closeErr := cl.ldapConnection.Close(); closeErr != nil {
-		cl.Logger.Warn(context.Background(), "Failed to close LDAP connection", map[string]interface{}{
-			"error": closeErr.Error(),
-		})
+	cl.connMu.Lock()
+	defer cl.connMu.Unlock()
+
+	if cl.ldapConnection != nil {
+		if err := cl.ldapConnection.Close(); err != nil {
+			cl.Logger.Warn(context.Background(), "Failed to close LDAP connection", map[string]interface{}{
+				"error": err.Error(),
+			})
+			return err
+		}
+		cl.ldapConnection = nil
 	}
 	return nil
 }
 
-func (cl *Client) connect() (*ldap.Conn, error) {
-	address := fmt.Sprintf("ldaps://%s:%d", cl.host, cl.port)
+// GetConnection returns the current LDAP connection with read lock.
+func (cl *Client) GetConnection() *ldap.Conn {
+	cl.connMu.RLock()
+	defer cl.connMu.RUnlock()
+	return cl.ldapConnection
+}
 
-	currentTime := time.Now()
+func (cl *Client) connect() (*ldap.Conn, error) {
+	scheme := "ldap"
+	if cl.useTLS {
+		scheme = "ldaps"
+	}
+	address := fmt.Sprintf("%s://%s:%d", scheme, cl.host, cl.port)
+
 	cl.Logger.Debug(context.Background(), "Connecting to LDAP server", map[string]interface{}{
-		"address":      address,
-		"host":         cl.host,
-		"port":         cl.port,
-		"current_time": currentTime.Format(time.RFC3339),
-		"unix_time":    currentTime.Unix(),
-		"tls_enabled":  cl.useTLS,
+		"address":     address,
+		"tls_enabled": cl.useTLS,
 	})
 
 	var conn *ldap.Conn
@@ -110,7 +110,7 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 			"error":   err.Error(),
 			"address": address,
 		})
-		return nil, fmt.Errorf("failed to dial LDAP server: %w", err)
+		return nil, fmt.Errorf("failed to dial LDAP server at %s: %w", address, err)
 	}
 
 	targetSPN := fmt.Sprintf("ldap/%s", cl.host)
@@ -118,19 +118,14 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 	cl.Logger.Debug(context.Background(), "Attempting GSSAPI bind", map[string]interface{}{
 		"client_principal": cl.kerberosPrincipal,
 		"target_spn":       targetSPN,
-		"host":             cl.host,
 	})
 
-	err = conn.GSSAPIBind(cl.gssApiClient, targetSPN, "")
-	if err != nil {
+	if err = conn.GSSAPIBind(cl.gssApiClient, targetSPN, ""); err != nil {
 		cl.Logger.Error(context.Background(), "GSSAPI bind failed", map[string]interface{}{
 			"error":     err.Error(),
 			"principal": cl.kerberosPrincipal,
-			"host":      cl.host,
 		})
-		if err := conn.Close(); err != nil {
-			return nil, fmt.Errorf("GSSAPI connection close failed: %w", err)
-		}
+		_ = conn.Close()
 		return nil, fmt.Errorf("GSSAPI bind failed: %w", err)
 	}
 

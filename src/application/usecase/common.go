@@ -2,12 +2,25 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"reverse-proxy-mac/src/domain/auth"
 	"reverse-proxy-mac/src/infrastructure/ldap"
+)
+
+const (
+	macLabelParts      = 4
+	maxConfidentiality = 255
+	maxIntegrity       = 0xFFFFFFFF
+)
+
+var (
+	errEmptyHTTPMethod = errors.New("HTTP method cannot be empty")
+	errHostNotFound    = errors.New("host not found")
+	errUserNotFound    = errors.New("user not found")
 )
 
 type macLabel struct {
@@ -17,27 +30,22 @@ type macLabel struct {
 	Capabilities    uint64
 }
 
-// parseMacLabel parses a MAC (Mandatory Access Control) label string in the format:
-// "confidentiality:categories:capabilities:integrity" where:
-//   - confidentiality: decimal uint8 (0-255)
-//   - categories: hexadecimal uint64 (e.g., 0x3F)
-//   - capabilities: decimal uint64
-//   - integrity: hexadecimal uint32 (e.g., 0x1A)
-//
+// parseMacLabel parses a MAC label string in format "confidentiality:categories:capabilities:integrity".
 // Example: "2:3F:100:1A" represents confidentiality=2, categories=0x3F, capabilities=100, integrity=0x1A
 func parseMacLabel(mac string) (*macLabel, error) {
-	var label macLabel
-
 	parts := strings.Split(mac, ":")
-	if len(parts) != 4 {
+	if len(parts) != macLabelParts {
 		return nil, fmt.Errorf("invalid MAC label '%s': expected format confidentiality:cats:caps:integrity", mac)
 	}
 
+	var label macLabel
 	var confidentialityTmp, integrityTmp uint64
 
-	_, err := fmt.Sscanf(parts[0], "%d", &confidentialityTmp)
-	if err != nil || confidentialityTmp > 255 {
+	if _, err := fmt.Sscanf(parts[0], "%d", &confidentialityTmp); err != nil {
 		return nil, fmt.Errorf("invalid confidentiality '%s': %w", parts[0], err)
+	}
+	if confidentialityTmp > maxConfidentiality {
+		return nil, fmt.Errorf("confidentiality value %d exceeds maximum %d", confidentialityTmp, maxConfidentiality)
 	}
 	label.Confidentiality = uint8(confidentialityTmp)
 
@@ -49,60 +57,55 @@ func parseMacLabel(mac string) (*macLabel, error) {
 		return nil, fmt.Errorf("invalid capabilities '%s': %w", parts[2], err)
 	}
 
-	_, err = fmt.Sscanf(parts[3], "%x", &integrityTmp)
-	if err != nil || integrityTmp > 0xFFFFFFFF {
+	if _, err := fmt.Sscanf(parts[3], "%x", &integrityTmp); err != nil {
 		return nil, fmt.Errorf("invalid integrity '%s': %w", parts[3], err)
+	}
+	if integrityTmp > maxIntegrity {
+		return nil, fmt.Errorf("integrity value %d exceeds maximum %d", integrityTmp, maxIntegrity)
 	}
 	label.Integrity = uint32(integrityTmp)
 
 	return &label, nil
 }
 
-// validateHTTPMethod validates that the HTTP method is one of the standard methods
+var validHTTPMethods = map[string]struct{}{
+	"GET":     {},
+	"POST":    {},
+	"PUT":     {},
+	"DELETE":  {},
+	"PATCH":   {},
+	"HEAD":    {},
+	"OPTIONS": {},
+	"TRACE":   {},
+	"CONNECT": {},
+}
+
 func validateHTTPMethod(method string) error {
-	validMethods := map[string]bool{
-		"GET":     true,
-		"POST":    true,
-		"PUT":     true,
-		"DELETE":  true,
-		"PATCH":   true,
-		"HEAD":    true,
-		"OPTIONS": true,
-		"TRACE":   true,
-		"CONNECT": true,
-	}
-
 	if method == "" {
-		return fmt.Errorf("HTTP method cannot be empty")
+		return errEmptyHTTPMethod
 	}
 
-	upperMethod := strings.ToUpper(method)
-	if !validMethods[upperMethod] {
+	if _, ok := validHTTPMethods[strings.ToUpper(method)]; !ok {
 		return fmt.Errorf("invalid HTTP method: %s", method)
 	}
 
 	return nil
 }
 
-// extractHostFromHeader extracts the FQDN from the authorization request
-// The Host header may contain port number (e.g., "example.com:8080"), which is stripped
+// extractHostFromRequest extracts the FQDN from the authorization request.
+// The Host header may contain port number (e.g., "example.com:8080"), which is stripped.
 func extractHostFromRequest(req *auth.AuthRequest) (string, error) {
-	hostHeader, hasHostHeader := req.HTTPHeaders["host"]
-
-	if !hasHostHeader {
-		return "", fmt.Errorf("host header not present in request")
+	hostHeader, ok := req.HTTPHeaders["host"]
+	if !ok || hostHeader == "" {
+		return "", errors.New("host header not present or empty in request")
 	}
 
-	if hostHeader == "" {
-		return "", fmt.Errorf("host header is empty")
-	}
-
-	host, err := url.Parse("http://" + hostHeader)
+	parsed, err := url.Parse("http://" + hostHeader)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse host: %w", err)
+		return "", fmt.Errorf("failed to parse host header: %w", err)
 	}
 
-	return host.Hostname(), nil
+	return parsed.Hostname(), nil
 }
 
 func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (*auth.HostSecurityContext, error) {
@@ -111,7 +114,7 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 		return nil, fmt.Errorf("failed to search host in LDAP: %w", err)
 	}
 	if hostEntry == nil {
-		return nil, fmt.Errorf("host not found")
+		return nil, errHostNotFound
 	}
 
 	macValue := hostEntry.GetAttributeValue(auth.HostMacAttribute)

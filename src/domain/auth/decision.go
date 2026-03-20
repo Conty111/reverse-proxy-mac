@@ -1,3 +1,4 @@
+// Package auth defines the core authentication and authorization domain types.
 package auth
 
 import (
@@ -5,12 +6,25 @@ import (
 	"time"
 )
 
+// Decision represents the outcome of an authorization check.
 type Decision int
 
 const (
 	DecisionAllow Decision = iota
 	DecisionDeny
 )
+
+// String returns the string representation of the decision.
+func (d Decision) String() string {
+	switch d {
+	case DecisionAllow:
+		return "ALLOW"
+	case DecisionDeny:
+		return "DENY"
+	default:
+		return "UNKNOWN"
+	}
+}
 
 type AuthRequest struct {
 	RequestID   string
