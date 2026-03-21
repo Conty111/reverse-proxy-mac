@@ -18,6 +18,10 @@ type HTTPAuthorizerSuite struct {
 	suite.Suite
 }
 
+func TestHTTPAuthorizerSuiteRunner(t *testing.T) {
+	suite.RunSuite(t, new(HTTPAuthorizerSuite))
+}
+
 func (s *HTTPAuthorizerSuite) BeforeAll(t provider.T) {
 	t.Epic("HTTP Authorization")
 	t.Feature("Kerberos Authentication & MAC Authorization")
@@ -267,8 +271,4 @@ func (s *HTTPAuthorizerSuite) TestCreateUnauthorizedResponse(t provider.T) {
 	t.Assert().Equal("Kerberos authentication required", resp.Reason)
 	t.Assert().Contains(resp.Headers, "WWW-Authenticate")
 	t.Assert().Equal("Negotiate", resp.Headers["WWW-Authenticate"])
-}
-
-func TestHTTPAuthorizerSuiteRunner(t *testing.T) {
-	suite.RunSuite(t, new(HTTPAuthorizerSuite))
 }

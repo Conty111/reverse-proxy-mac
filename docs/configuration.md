@@ -1,9 +1,12 @@
 # Configuration
 
+> Health-эндпоинты и метрики описаны в [metrics.md](./metrics.md).
+
 ```
 {
   "server": { // grpc server settings
     "grpc_port": 9001, // port listen to
+    "http_port": 8080, // port listen to
     "host": "0.0.0.0" // address listen to
   },
   "log": { // loggign settings

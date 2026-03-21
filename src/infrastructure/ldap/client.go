@@ -84,6 +84,13 @@ func (cl *Client) GetConnection() *ldap.Conn {
 	return cl.ldapConnection
 }
 
+// IsConnected returns true if the LDAP client has an active connection.
+func (cl *Client) IsConnected() bool {
+	cl.connMu.RLock()
+	defer cl.connMu.RUnlock()
+	return cl.ldapConnection != nil
+}
+
 func (cl *Client) connect() (*ldap.Conn, error) {
 	scheme := "ldap"
 	if cl.useTLS {

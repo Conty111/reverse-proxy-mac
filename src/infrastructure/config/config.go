@@ -13,6 +13,7 @@ import (
 // Default configuration values.
 const (
 	DefaultGRPCPort  = 9001
+	DefaultHTTPPort  = 8080
 	DefaultHost      = "0.0.0.0"
 	DefaultLogLevel  = "info"
 	DefaultLDAPPort  = 389
@@ -27,6 +28,7 @@ type Config struct {
 
 type ServerConfig struct {
 	GRPCPort int    `json:"grpc_port"`
+	HTTPPort int    `json:"http_port"`
 	Host     string `json:"host"`
 }
 
@@ -75,6 +77,9 @@ func (c *Config) setDefaults() {
 	if c.Server.GRPCPort == 0 {
 		c.Server.GRPCPort = DefaultGRPCPort
 	}
+	if c.Server.HTTPPort == 0 {
+		c.Server.HTTPPort = DefaultHTTPPort
+	}
 	if c.Server.Host == "" {
 		c.Server.Host = DefaultHost
 	}
@@ -112,6 +117,10 @@ func (c *Config) Validate() error {
 
 	if c.Server.GRPCPort < 1 || c.Server.GRPCPort > 65535 {
 		errs = append(errs, "server.grpc_port must be between 1 and 65535")
+	}
+
+	if c.Server.HTTPPort < 1 || c.Server.HTTPPort > 65535 {
+		errs = append(errs, "server.http_port must be between 1 and 65535")
 	}
 
 	if len(errs) > 0 {

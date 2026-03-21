@@ -37,6 +37,7 @@ func run(ctx context.Context) error {
 	log.Info(ctx, "Starting mac-authserver", map[string]interface{}{
 		"config_path": *configPath,
 		"grpc_port":   cfg.Server.GRPCPort,
+		"http_port":   cfg.Server.HTTPPort,
 		"log_level":   cfg.Log.Level,
 	})
 
@@ -80,6 +81,18 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	// Start HTTP server for health checks and metrics
+	httpServer := server.NewHTTPServer(cfg.Server.Host, cfg.Server.HTTPPort, log)
+
+	// Register health checkers
+	httpServer.RegisterHealthChecker("grpc", &grpcHealthChecker{grpcServer: grpcServer})
+	httpServer.RegisterHealthChecker("ldap", &ldapHealthChecker{ldapClient: ldapClient})
+
+	if err := httpServer.Start(ctx); err != nil {
+		log.Error(ctx, "Failed to start HTTP server", map[string]interface{}{"error": err.Error()})
+		return err
+	}
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
@@ -89,10 +102,32 @@ func run(ctx context.Context) error {
 	log.Info(ctx, "Shutdown signal received", nil)
 
 	// Graceful shutdown
+	if err := httpServer.Stop(ctx); err != nil {
+		log.Error(ctx, "Error stopping HTTP server", map[string]interface{}{"error": err.Error()})
+	}
+
 	if err := grpcServer.Stop(ctx); err != nil {
 		log.Error(ctx, "Error stopping gRPC server", map[string]interface{}{"error": err.Error()})
 	}
 
 	log.Info(ctx, "Service stopped successfully", nil)
 	return nil
+}
+
+// grpcHealthChecker implements server.HealthChecker for gRPC server.
+type grpcHealthChecker struct {
+	grpcServer *server.GRPCServer
+}
+
+func (c *grpcHealthChecker) IsHealthy(ctx context.Context) bool {
+	return c.grpcServer.IsRunning()
+}
+
+// ldapHealthChecker implements server.HealthChecker for LDAP client.
+type ldapHealthChecker struct {
+	ldapClient *ldap.Client
+}
+
+func (c *ldapHealthChecker) IsHealthy(ctx context.Context) bool {
+	return c.ldapClient.IsConnected()
 }

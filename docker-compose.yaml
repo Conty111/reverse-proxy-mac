@@ -10,6 +10,7 @@ services:
     hostname: mac-authserver
     ports:
       - "9001:9001"
+      - "8000:8080"
     volumes:
       - ./config.json:/app/config.json:ro
       - ./mac-authserver.keytab:/etc/mac-authserver.keytab:ro
@@ -20,7 +21,7 @@ services:
       - proxy-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "9001"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
       interval: 10s
       timeout: 5s
       retries: 3

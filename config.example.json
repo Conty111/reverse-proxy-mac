@@ -1,6 +1,7 @@
 {
   "server": {
     "grpc_port": 9001,
+    "http_port": 8080,
     "host": "0.0.0.0"
   },
   "log": {
