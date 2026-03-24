@@ -1,8 +1,0 @@
-dn: cn=schema
-# Комплексная классификационная метка URL-ресурса
-attributeTypes: ( 1.3.6.1.4.1.32702.1.1.3.1 NAME 'x-ald-url-mac' DESC 'Complex MAC label for a URL resource (auto-generated from min/max)' EQUALITY caseIgnoreMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
-# Признак glob-выражения: если TRUE — значение path является glob-паттерном, а не точным URL
-attributeTypes: ( 1.3.6.1.4.1.32702.1.1.3.2 NAME 'x-ald-url-glob' DESC 'If TRUE, the URL path is treated as a glob expression rather than an exact URL' EQUALITY booleanMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.7 SINGLE-VALUE )
-# Произвольное текстовое описание URL-ресурса
-attributeTypes: ( 1.3.6.1.4.1.32702.1.1.3.3 NAME 'x-ald-url-description' DESC 'Human-readable description of the URL resource' EQUALITY caseIgnoreMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
-objectClasses: ( 1.3.6.1.4.1.32702.2.3 NAME 'aldURLContext' DESC 'Auxiliary class for URL resource MAC context; must be linked to one or more host entries' SUP top AUXILIARY MUST ( x-ald-url-mac ) MAY ( x-ald-url-glob $ x-ald-url-description ) )

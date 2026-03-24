@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
+
+	goldap "github.com/go-ldap/ldap/v3"
 
 	"reverse-proxy-mac/src/domain/auth"
 	"reverse-proxy-mac/src/infrastructure/ldap"
@@ -133,6 +136,141 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 		Capabilities:    label.Capabilities,
 		Integrity:       label.Integrity,
 	}, nil
+}
+
+// parseMatchType converts the raw LDAP string value of x-ald-uri-match-type to a URIMatchType.
+// Absent or unrecognised values default to URIMatchExact.
+func parseMatchType(raw string) auth.URIMatchType {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case string(auth.URIMatchPrefix):
+		return auth.URIMatchPrefix
+	case string(auth.URIMatchRegex):
+		return auth.URIMatchRegex
+	default:
+		return auth.URIMatchExact
+	}
+}
+
+// GetURIMACRules retrieves all URI MAC rules from LDAP that are bound to the given host FQDN.
+// Rules are stored as aldURIMACRule structural entries and carry a MAC label for a URI path.
+// URI MAC rules are bound to hosts/host-groups.
+func GetURIMACRules(ctx context.Context, cl *ldap.Client, hostFQDN string) ([]*auth.URIMACRule, error) {
+	filter := fmt.Sprintf(
+		"(&(objectClass=aldURIMACRule)(x-ald-uri-host=%s))",
+		goldap.EscapeFilter(hostFQDN),
+	)
+
+	entries, err := cl.SearchAll(ctx, filter, auth.AllURIMACRuleAttributes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search URI MAC rules in LDAP: %w", err)
+	}
+
+	rules := make([]*auth.URIMACRule, 0, len(entries))
+	for _, entry := range entries {
+		macValue := entry.GetAttributeValue(auth.URIMacAttribute)
+		if macValue == "" {
+			continue
+		}
+
+		label, err := parseMacLabel(macValue)
+		if err != nil {
+			cl.Logger.Warn(ctx, "Skipping URI MAC rule with invalid label", map[string]interface{}{
+				"dn":    entry.DN,
+				"error": err.Error(),
+			})
+			continue
+		}
+
+		uriPath := entry.GetAttributeValue(auth.URIPathAttribute)
+		if uriPath == "" {
+			continue
+		}
+
+		matchType := parseMatchType(entry.GetAttributeValue(auth.URIMatchTypeAttribute))
+
+		// Pre-validate regex patterns at load time so we don't fail at match time.
+		if matchType == auth.URIMatchRegex {
+			if _, err := regexp.Compile(uriPath); err != nil {
+				cl.Logger.Warn(ctx, "Skipping URI MAC rule with invalid regex", map[string]interface{}{
+					"dn":    entry.DN,
+					"path":  uriPath,
+					"error": err.Error(),
+				})
+				continue
+			}
+		}
+
+		rule := &auth.URIMACRule{
+			CN:        entry.GetAttributeValue("cn"),
+			URIPath:   uriPath,
+			MatchType: matchType,
+			MACLabel: auth.URISecurityContext{
+				Path:            uriPath,
+				Confidentiality: label.Confidentiality,
+				Categories:      label.Categories,
+				Capabilities:    label.Capabilities,
+				Integrity:       label.Integrity,
+			},
+			HostFQDNs:   entry.GetAttributeValues(auth.URIHostAttribute),
+			HostGroups:  entry.GetAttributeValues(auth.URIHostGroupAttribute),
+			Description: entry.GetAttributeValue(auth.URIDescriptionAttribute),
+		}
+		rules = append(rules, rule)
+	}
+
+	return rules, nil
+}
+
+// MatchURIMACRule finds the most specific URI MAC rule that matches the given URI path.
+//
+// Match type priority (highest to lowest):
+//  1. Exact match
+//  2. Prefix match (longest prefix wins)
+//  3. Regex match (longest pattern string wins as a tiebreaker)
+//
+// Returns nil if no rule matches.
+func MatchURIMACRule(rules []*auth.URIMACRule, uriPath string) *auth.URIMACRule {
+	var bestExact *auth.URIMACRule
+	var bestPrefix *auth.URIMACRule
+	var bestRegex *auth.URIMACRule
+
+	for _, rule := range rules {
+		switch rule.MatchType {
+		case auth.URIMatchExact:
+			if rule.URIPath == uriPath {
+				bestExact = rule
+			}
+
+		case auth.URIMatchPrefix:
+			// The request path must start with the rule prefix.
+			// A prefix "/api" matches "/api", "/api/", "/api/foo" but not "/apifoo".
+			prefix := rule.URIPath
+			if strings.HasPrefix(uriPath, prefix) {
+				rest := uriPath[len(prefix):]
+				if rest == "" || rest[0] == '/' {
+					if bestPrefix == nil || len(prefix) > len(bestPrefix.URIPath) {
+						bestPrefix = rule
+					}
+				}
+			}
+
+		case auth.URIMatchRegex:
+			matched, err := regexp.MatchString("^(?:"+rule.URIPath+")$", uriPath)
+			if err == nil && matched {
+				if bestRegex == nil || len(rule.URIPath) > len(bestRegex.URIPath) {
+					bestRegex = rule
+				}
+			}
+		}
+	}
+
+	if bestExact != nil {
+		return bestExact
+	}
+	if bestPrefix != nil {
+		return bestPrefix
+	}
+	return bestRegex
 }
 
 func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool) (bool, string) {

@@ -29,13 +29,14 @@ ipa host-mod ${TARGET_HOST} \
 
 Формат атрибута аналогичен формату атрибутов пользователей `x-ald-user-mac`:
 
-```bash
+```
 confidentiality:categories:capabilities:integrity
 ```
 
 ### Выдать права на чтение
 
-Для работы с созданными ранее атрибутами требуется выдать разрешения. Например, выдать разрешение на чтение, поиск и сравнени атрибутов для всех можно так:
+Для работы с созданными ранее атрибутами требуется выдать разрешения. Например, выдать разрешение на чтение, поиск и сравнение атрибутов для всех можно так:
+
 ```bash
 ipa permission-add "Read custom host security context" \
   --type=host \
@@ -44,62 +45,157 @@ ipa permission-add "Read custom host security context" \
   --bindtype=all
 ```
 
-## Создание новой сущности
+## Добавление меток URI-ресурсам
 
-## Добавление меток URL-ресурсам
+### Схема атрибутов URI-ресурса (`aldURIContext`)
 
-### Схема атрибутов URL-ресурса (`aldURLContext`)
+Вспомогательный класс `aldURIContext` прикрепляется к существующей записи хоста и несёт MAC-метку для конкретного URI-пути на этом хосте.
 
 | OID | Имя | Тип | Описание |
 |-----|-----|-----|----------|
-| `1.3.6.1.4.1.32702.1.1.3.1` | `x-ald-url-mac` | attributeType | Комплексная MAC-метка URL-ресурса, SINGLE-VALUE string, обязательный |
-| `1.3.6.1.4.1.32702.1.1.3.2` | `x-ald-url-glob` | attributeType | Boolean: если `TRUE` — путь является glob-выражением, SINGLE-VALUE, опциональный |
-| `1.3.6.1.4.1.32702.1.1.3.3` | `x-ald-url-description` | attributeType | Текстовое описание ресурса, SINGLE-VALUE string, опциональный |
-| `1.3.6.1.4.1.32702.2.3` | `aldURLContext` | objectClass | AUXILIARY-класс; MUST `x-ald-url-mac`, MAY `x-ald-url-glob`, `x-ald-url-description` |
+| `1.3.6.1.4.1.32702.1.1.3.1` | `x-ald-uri-mac` | attributeType | Комплексная MAC-метка URI-ресурса, SINGLE-VALUE string, обязательный |
+| `1.3.6.1.4.1.32702.1.1.3.2` | `x-ald-uri-match-type` | attributeType | Тип сопоставления пути: `exact` (по умолчанию), `prefix`, `regex`, SINGLE-VALUE, опциональный |
+| `1.3.6.1.4.1.32702.1.1.3.3` | `x-ald-uri-description` | attributeType | Текстовое описание ресурса, SINGLE-VALUE string, опциональный |
+| `1.3.6.1.4.1.32702.2.3` | `aldURIContext` | objectClass | AUXILIARY-класс; MUST `x-ald-uri-mac`, MAY `x-ald-uri-match-type`, `x-ald-uri-description` |
 
+Чтобы добавить URI-ресурсам атрибуты мандатного управления доступом:
 
-Чтобы добавить URL-ресурсам атрибуты мандатного управления доступом:
-
-1. Файл [74x-ald-url-mac.ldif](../../74x-ald-url-mac.ldif) вместе с его содержимым создайте на сервере со службой каталога по пути `/etc/dirsrv/slapd-ALD-COMPANY-LAN/schema/74x-ald-url-mac.ldif` (путь может отличаться в зависимости от realm вашего домена)
+1. Файл [74x-ald-uri-mac.ldif](../../74x-ald-uri-mac.ldif) вместе с его содержимым создайте на сервере со службой каталога по пути `/etc/dirsrv/slapd-ALD-COMPANY-LAN/schema/74x-ald-uri-mac.ldif`
 2. Перезапустите службу каталогов:
 
     ```bash
     systemctl restart dirsrv@ALD-COMPANY-LAN.service
     ```
 
-Назначить созданные ранее атрибуты URL-ресурса можно следующими командами (заменив `${TARGET_HOST}` на FQDN узла, к которому привязывается ресурс, и `${URL_CN}` на уникальное имя записи):
+### Выдать права на чтение
 
 ```bash
-# Создать запись URL-ресурса и привязать её к хосту
+ipa permission-add "Read custom URI security context" \
+  --type=service \
+  --right={read,search,compare} \
+  --attrs={x-ald-uri-mac,x-ald-uri-match-type,x-ald-uri-description} \
+  --bindtype=all
+```
+
+## URI-based MAC правила (`aldURIMACRule`)
+
+### Концепция
+
+URI-based MAC (по аналогии с [URI-based HBAC](https://www.freeipa.org/page/V4/URI-based_HBAC)) — механизм мандатного управления доступом на уровне URI-пути.
+
+**Ключевые отличия от ролевой модели:**
+
+- Правило несёт **MAC-метку** (`confidentiality:categories:capabilities:integrity`), а не просто разрешение.
+- Правило привязывается к **хостам и/или группам хостов** — не к пользователям или группам пользователей.
+- Проверка выполняется путём сравнения MAC-метки пользователя с MAC-меткой правила для данного URI-пути.
+
+### Схема атрибутов URI MAC-правила (`aldURIMACRule`)
+
+Структурный класс `aldURIMACRule` хранится как самостоятельная запись в дереве каталога и связывается с хостами через атрибуты `x-ald-uri-host` / `x-ald-uri-hostgroup`.
+
+| OID | Имя | Тип | Описание |
+|-----|-----|-----|----------|
+| `1.3.6.1.4.1.32702.1.1.3.1` | `x-ald-uri-mac` | attributeType | Комплексная MAC-метка URI-ресурса, SINGLE-VALUE string, **обязательный** |
+| `1.3.6.1.4.1.32702.1.1.3.2` | `x-ald-uri-match-type` | attributeType | Тип сопоставления пути: `exact` (по умолчанию), `prefix`, `regex`, SINGLE-VALUE, опциональный |
+| `1.3.6.1.4.1.32702.1.1.3.3` | `x-ald-uri-description` | attributeType | Текстовое описание ресурса, SINGLE-VALUE string, опциональный |
+| `1.3.6.1.4.1.32702.1.1.3.4` | `x-ald-uri-path` | attributeType | URI-путь (точный, префикс или regex-паттерн), SINGLE-VALUE string, **обязательный** |
+| `1.3.6.1.4.1.32702.1.1.3.5` | `x-ald-uri-host` | attributeType | FQDN хоста, к которому привязано правило, MULTI-VALUE, опциональный |
+| `1.3.6.1.4.1.32702.1.1.3.6` | `x-ald-uri-hostgroup` | attributeType | CN группы хостов, к которой привязано правило, MULTI-VALUE, опциональный |
+| `1.3.6.1.4.1.32702.2.4` | `aldURIMACRule` | objectClass | STRUCTURAL-класс; MUST `cn`, `x-ald-uri-mac`, `x-ald-uri-path`; MAY остальные |
+
+### Типы сопоставления URI-пути (`x-ald-uri-match-type`)
+
+| Значение | Описание | Пример правила | Совпадает с |
+|----------|----------|----------------|-------------|
+| `exact` | Точное совпадение (по умолчанию) | `/api/secret` | только `/api/secret` |
+| `prefix` | Путь запроса начинается с указанного префикса | `/api/v1` | `/api/v1`, `/api/v1/`, `/api/v1/users` |
+| `regex` | Путь запроса соответствует регулярному выражению (RE2) | `/api/v[0-9]+/.*` | `/api/v1/users`, `/api/v2/items` |
+
+**Приоритет при нескольких совпадениях:**
+1. Точное совпадение (`exact`) — наивысший приоритет
+2. Префиксное совпадение (`prefix`) — побеждает самый длинный префикс
+3. Regex-совпадение (`regex`) — побеждает самый длинный паттерн (как тайбрейкер)
+
+### Установка схемы
+
+1. Файл [74x-ald-uri-mac.ldif](../../74x-ald-uri-mac.ldif) вместе с его содержимым создайте на сервере со службой каталога по пути `/etc/dirsrv/slapd-ALD-COMPANY-LAN/schema/74x-ald-uri-mac.ldif`
+2. Перезапустите службу каталогов:
+
+    ```bash
+    systemctl restart dirsrv@ALD-COMPANY-LAN.service
+    ```
+
+### Создание URI MAC-правил
+
+**Точное совпадение** — доступ к `/api/secret` только для уровня 2+:
+
+```bash
 ldapadd -Y GSSAPI <<EOF
-dn: fqdn=${TARGET_HOST},cn=computers,cn=accounts,dc=ald,dc=company,dc=lan
+dn: cn=rule-api-secret,cn=uri-mac-rules,cn=accounts,dc=ald,dc=company,dc=lan
 objectClass: top
-objectClass: aldURLContext
-cn: ${URL_CN}
-x-ald-url-mac: 2:0x1:0:0x0
-x-ald-url-glob: FALSE
-x-ald-url-description: Описание ресурса
+objectClass: aldURIMACRule
+cn: rule-api-secret
+x-ald-uri-mac: 2:0x1:0:0x0
+x-ald-uri-path: /api/secret
+x-ald-uri-host: app.ald.company.lan
+x-ald-uri-description: Доступ к секретному API только для уровня 2+
 EOF
 ```
 
-Формат атрибута `x-ald-url-mac` аналогичен формату атрибутов пользователей `x-ald-user-mac` и хостов `x-ald-host-mac`:
+**Префиксное совпадение** — весь административный раздел `/api/admin/` для уровня 3:
 
+```bash
+ldapadd -Y GSSAPI <<EOF
+dn: cn=rule-api-admin,cn=uri-mac-rules,cn=accounts,dc=ald,dc=company,dc=lan
+objectClass: top
+objectClass: aldURIMACRule
+cn: rule-api-admin
+x-ald-uri-mac: 3:0xFF:0:0x0
+x-ald-uri-path: /api/admin
+x-ald-uri-match-type: prefix
+x-ald-uri-host: app.ald.company.lan
+x-ald-uri-hostgroup: web-servers
+x-ald-uri-description: Административный API — уровень 3, все категории
+EOF
 ```
-confidentiality:categories:capabilities:integrity
+
+**Regex-совпадение** — все версионированные API-эндпоинты `/api/v<N>/`:
+
+```bash
+ldapadd -Y GSSAPI <<EOF
+dn: cn=rule-api-versioned,cn=uri-mac-rules,cn=accounts,dc=ald,dc=company,dc=lan
+objectClass: top
+objectClass: aldURIMACRule
+cn: rule-api-versioned
+x-ald-uri-mac: 2:0x3:0:0x0
+x-ald-uri-path: /api/v[0-9]+(/.*)?
+x-ald-uri-match-type: regex
+x-ald-uri-host: app.ald.company.lan
+x-ald-uri-description: Версионированные API-эндпоинты
+EOF
 ```
 
-Атрибут `x-ald-url-glob` принимает значения `TRUE` или `FALSE`. Если `TRUE` — значение пути трактуется как glob-выражение (например, `/api/**`), а не точный URL.
+### Логика проверки доступа
 
-Атрибут `x-ald-url-description` является необязательным и содержит произвольное текстовое описание ресурса.
+При поступлении HTTP-запроса сервис авторизации выполняет следующие шаги:
+
+1. **Аутентификация** — проверка Kerberos-тикета пользователя.
+2. **Получение MAC-метки пользователя** — из атрибута `x-ald-user-mac` в LDAP.
+3. **Проверка на уровне хоста** — MAC-метка пользователя сравнивается с меткой хоста (`x-ald-host-mac`).
+4. **Поиск URI MAC-правил** — из LDAP выбираются все `aldURIMACRule`, у которых `x-ald-uri-host` совпадает с FQDN целевого хоста.
+5. **Сопоставление URI-пути** — среди найденных правил выбирается наиболее специфичное совпадение согласно приоритету: `exact` > `prefix` (длиннее) > `regex` (длиннее).
+6. **Проверка на уровне URI** — если правило найдено, MAC-метка пользователя сравнивается с меткой правила по модели Bell-LaPadula:
+   - Чтение (`GET`, `HEAD`, …): уровень пользователя ≥ уровня правила.
+   - Запись (`POST`, `PUT`, `DELETE`, `PATCH`): уровень пользователя = уровню правила.
+   - Категории, capabilities и integrity пользователя должны включать все требуемые правилом.
+7. Если URI-правило не найдено — достаточно прохождения проверки на уровне хоста.
 
 ### Выдать права на чтение
 
-Для работы с созданными ранее атрибутами требуется выдать разрешения. Например, выдать разрешение на чтение, поиск и сравнение атрибутов для всех можно так:
-
 ```bash
-ipa permission-add "Read custom URL security context" \
+ipa permission-add "Read URI MAC rules" \
   --type=service \
   --right={read,search,compare} \
-  --attrs={x-ald-url-mac,x-ald-url-glob,x-ald-url-description} \
+  --attrs={cn,x-ald-uri-mac,x-ald-uri-path,x-ald-uri-match-type,x-ald-uri-host,x-ald-uri-hostgroup,x-ald-uri-description} \
   --bindtype=all
 ```

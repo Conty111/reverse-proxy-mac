@@ -1,0 +1,17 @@
+dn: cn=schema
+# Комплексная классификационная метка URI-ресурса
+attributeTypes: ( 1.3.6.1.4.1.32702.1.1.3.1 NAME 'x-ald-uri-mac' DESC 'Complex MAC label for a URI resource (confidentiality:categories:capabilities:integrity)' EQUALITY caseIgnoreMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+# Тип сопоставления URI-пути: exact | prefix | regex
+attributeTypes: ( 1.3.6.1.4.1.32702.1.1.3.2 NAME 'x-ald-uri-match-type' DESC 'URI path matching type: exact (default), prefix, or regex' EQUALITY caseIgnoreMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+# Произвольное текстовое описание URI-ресурса
+attributeTypes: ( 1.3.6.1.4.1.32702.1.1.3.3 NAME 'x-ald-uri-description' DESC 'Human-readable description of the URI resource' EQUALITY caseIgnoreMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+# URI-путь (точный, префикс или regex-паттерн)
+attributeTypes: ( 1.3.6.1.4.1.32702.1.1.3.4 NAME 'x-ald-uri-path' DESC 'URI path: exact string, prefix (ends with /*), or regex pattern depending on x-ald-uri-match-type' EQUALITY caseExactMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+# FQDN хоста, к которому привязано правило (multi-value)
+attributeTypes: ( 1.3.6.1.4.1.32702.1.1.3.5 NAME 'x-ald-uri-host' DESC 'FQDN of a host this URI MAC rule is bound to' EQUALITY caseIgnoreMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )
+# CN группы хостов, к которой привязано правило (multi-value)
+attributeTypes: ( 1.3.6.1.4.1.32702.1.1.3.6 NAME 'x-ald-uri-hostgroup' DESC 'CN of a host group this URI MAC rule is bound to' EQUALITY caseIgnoreMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )
+# Вспомогательный класс для URI-ресурса (aldURIContext)
+objectClasses: ( 1.3.6.1.4.1.32702.2.3 NAME 'aldURIContext' DESC 'Auxiliary class for URI resource MAC context; attached to a host entry' SUP top AUXILIARY MUST ( x-ald-uri-mac ) MAY ( x-ald-uri-match-type $ x-ald-uri-description ) )
+# Независимая запись URI MAC-правила, привязанная к хостам/группам хостов (aldURIMACRule)
+objectClasses: ( 1.3.6.1.4.1.32702.2.4 NAME 'aldURIMACRule' DESC 'URI-based MAC rule entry; bound to hosts/host-groups; carries a MAC label for the URI path' SUP top STRUCTURAL MUST ( cn $ x-ald-uri-mac $ x-ald-uri-path ) MAY ( x-ald-uri-match-type $ x-ald-uri-host $ x-ald-uri-hostgroup $ x-ald-uri-description ) )

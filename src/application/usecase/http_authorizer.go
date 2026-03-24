@@ -119,10 +119,10 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		"integrity":    fmt.Sprintf("0x%x", hostSecCtx.Integrity),
 	})
 
-	// Perform MAC authorization check
+	// Perform host-level MAC authorization check
 	allowed, reason := checkAccessHTTP(userSecCtx, hostSecCtx)
 	if !allowed {
-		a.logger.Warn(ctx, "MAC authorization denied", map[string]interface{}{
+		a.logger.Warn(ctx, "Host-level MAC authorization denied", map[string]interface{}{
 			"principal": principal,
 			"fqdn":      hostFQDN,
 			"reason":    reason,
@@ -133,6 +133,66 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 			DeniedStatus:  403,
 			DeniedMessage: "Forbidden - MAC policy violation",
 		}, nil
+	}
+
+	// Perform URI-based MAC authorization check.
+	// URI MAC rules are bound to hosts/host-groups and carry a MAC label for a URI path.
+	// They are independent of the user — the user's MAC label is checked against the URI rule label.
+	uriRules, err := GetURIMACRules(ctx, a.ldapClient, hostFQDN)
+	if err != nil {
+		a.logger.Error(ctx, "Failed to retrieve URI MAC rules", map[string]interface{}{
+			"fqdn":  hostFQDN,
+			"error": err.Error(),
+		})
+		return &auth.AuthResponse{
+			Decision:      auth.DecisionDeny,
+			Reason:        fmt.Sprintf("Failed to retrieve URI MAC rules: %s", err.Error()),
+			DeniedStatus:  403,
+			DeniedMessage: "Forbidden - URI MAC rules unavailable",
+		}, nil
+	}
+
+	if len(uriRules) > 0 {
+		matchedRule := MatchURIMACRule(uriRules, req.HTTPPath)
+		if matchedRule != nil {
+			a.logger.Debug(ctx, "URI MAC rule matched", map[string]interface{}{
+				"rule_cn":    matchedRule.CN,
+				"uri_path":   matchedRule.URIPath,
+				"match_type": matchedRule.MatchType,
+				"level":      matchedRule.MACLabel.Confidentiality,
+			})
+
+			_, isWriteOperation := writeHTTPMethods[req.HTTPMethod]
+			uriAllowed, uriReason := checkMACAccess(userSecCtx, &matchedRule.MACLabel, isWriteOperation)
+			if !uriAllowed {
+				a.logger.Warn(ctx, "URI-level MAC authorization denied", map[string]interface{}{
+					"principal": principal,
+					"fqdn":      hostFQDN,
+					"uri_path":  req.HTTPPath,
+					"rule_cn":   matchedRule.CN,
+					"reason":    uriReason,
+				})
+				return &auth.AuthResponse{
+					Decision:      auth.DecisionDeny,
+					Reason:        uriReason,
+					DeniedStatus:  403,
+					DeniedMessage: "Forbidden - URI MAC policy violation",
+				}, nil
+			}
+
+			a.logger.Info(ctx, "URI-level MAC authorization granted", map[string]interface{}{
+				"principal": principal,
+				"fqdn":      hostFQDN,
+				"uri_path":  req.HTTPPath,
+				"rule_cn":   matchedRule.CN,
+				"reason":    uriReason,
+			})
+		} else {
+			a.logger.Debug(ctx, "No URI MAC rule matched for path, host-level check sufficient", map[string]interface{}{
+				"fqdn":     hostFQDN,
+				"uri_path": req.HTTPPath,
+			})
+		}
 	}
 
 	a.logger.Info(ctx, "MAC authorization granted", map[string]interface{}{
