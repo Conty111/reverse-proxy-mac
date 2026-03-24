@@ -3,7 +3,10 @@ package usecase
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"reverse-proxy-mac/src/domain/auth"
@@ -77,11 +80,12 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 	}
 
 	a.logger.Debug(ctx, "User security context retrieved", map[string]interface{}{
-		"principal":    principal,
-		"level":        userSecCtx.Confidentiality,
-		"categories":   fmt.Sprintf("0x%x", userSecCtx.Categories),
-		"capabilities": userSecCtx.Capabilities,
-		"integrity":    fmt.Sprintf("0x%x", userSecCtx.Integrity),
+		"principal":      principal,
+		"conf_min":       userSecCtx.ConfidentialityMin,
+		"cats_min":       fmt.Sprintf("0x%x", userSecCtx.CategoriesMin),
+		"conf_max":       userSecCtx.ConfidentialityMax,
+		"cats_max":       fmt.Sprintf("0x%x", userSecCtx.CategoriesMax),
+		"integrity_cats": fmt.Sprintf("0x%x", userSecCtx.IntegrityCategories),
 	})
 
 	hostFQDN, err := extractHostFromRequest(req)
@@ -112,11 +116,12 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 	}
 
 	a.logger.Debug(ctx, "Host security context retrieved", map[string]interface{}{
-		"fqdn":         hostFQDN,
-		"level":        hostSecCtx.Confidentiality,
-		"categories":   fmt.Sprintf("0x%x", hostSecCtx.Categories),
-		"capabilities": hostSecCtx.Capabilities,
-		"integrity":    fmt.Sprintf("0x%x", hostSecCtx.Integrity),
+		"fqdn":           hostFQDN,
+		"conf_min":       hostSecCtx.ConfidentialityMin,
+		"cats_min":       fmt.Sprintf("0x%x", hostSecCtx.CategoriesMin),
+		"conf_max":       hostSecCtx.ConfidentialityMax,
+		"cats_max":       fmt.Sprintf("0x%x", hostSecCtx.CategoriesMax),
+		"integrity_cats": fmt.Sprintf("0x%x", hostSecCtx.IntegrityCategories),
 	})
 
 	// Perform host-level MAC authorization check
@@ -133,66 +138,6 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 			DeniedStatus:  403,
 			DeniedMessage: "Forbidden - MAC policy violation",
 		}, nil
-	}
-
-	// Perform URI-based MAC authorization check.
-	// URI MAC rules are bound to hosts/host-groups and carry a MAC label for a URI path.
-	// They are independent of the user — the user's MAC label is checked against the URI rule label.
-	uriRules, err := GetURIMACRules(ctx, a.ldapClient, hostFQDN)
-	if err != nil {
-		a.logger.Error(ctx, "Failed to retrieve URI MAC rules", map[string]interface{}{
-			"fqdn":  hostFQDN,
-			"error": err.Error(),
-		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        fmt.Sprintf("Failed to retrieve URI MAC rules: %s", err.Error()),
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - URI MAC rules unavailable",
-		}, nil
-	}
-
-	if len(uriRules) > 0 {
-		matchedRule := MatchURIMACRule(uriRules, req.HTTPPath)
-		if matchedRule != nil {
-			a.logger.Debug(ctx, "URI MAC rule matched", map[string]interface{}{
-				"rule_cn":    matchedRule.CN,
-				"uri_path":   matchedRule.URIPath,
-				"match_type": matchedRule.MatchType,
-				"level":      matchedRule.MACLabel.Confidentiality,
-			})
-
-			_, isWriteOperation := writeHTTPMethods[req.HTTPMethod]
-			uriAllowed, uriReason := checkMACAccess(userSecCtx, &matchedRule.MACLabel, isWriteOperation)
-			if !uriAllowed {
-				a.logger.Warn(ctx, "URI-level MAC authorization denied", map[string]interface{}{
-					"principal": principal,
-					"fqdn":      hostFQDN,
-					"uri_path":  req.HTTPPath,
-					"rule_cn":   matchedRule.CN,
-					"reason":    uriReason,
-				})
-				return &auth.AuthResponse{
-					Decision:      auth.DecisionDeny,
-					Reason:        uriReason,
-					DeniedStatus:  403,
-					DeniedMessage: "Forbidden - URI MAC policy violation",
-				}, nil
-			}
-
-			a.logger.Info(ctx, "URI-level MAC authorization granted", map[string]interface{}{
-				"principal": principal,
-				"fqdn":      hostFQDN,
-				"uri_path":  req.HTTPPath,
-				"rule_cn":   matchedRule.CN,
-				"reason":    uriReason,
-			})
-		} else {
-			a.logger.Debug(ctx, "No URI MAC rule matched for path, host-level check sufficient", map[string]interface{}{
-				"fqdn":     hostFQDN,
-				"uri_path": req.HTTPPath,
-			})
-		}
 	}
 
 	a.logger.Info(ctx, "MAC authorization granted", map[string]interface{}{
@@ -239,13 +184,19 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 		return nil, err
 	}
 
-	userEntry, err := cl.Search(ctx, fmt.Sprintf("(uid=%s)", username), auth.AllMacUserAttributes)
+	userEntries, err := cl.Search(ctx, fmt.Sprintf("(uid=%s)", username), auth.AllMacUserAttributes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search user in LDAP: %w", err)
 	}
-	if userEntry == nil {
+	if len(userEntries) == 0 {
 		return nil, errUserNotFound
 	}
+	if len(userEntries) > 1 {
+		cl.Logger.Warn(ctx, "multiple users found", map[string]interface{}{
+			"count": len(userEntries),
+		})
+	}
+	userEntry := userEntries[0]
 
 	attrs := make(map[string]interface{}, len(userEntry.Attributes))
 	for _, attr := range userEntry.Attributes {
@@ -262,12 +213,61 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse MAC label for user: %w", err)
 	}
+	integrity := userEntry.GetAttributeValue(auth.UserIntegrityLevelAttribute)
+	if integrity == "" {
+		return nil, fmt.Errorf("user integrity categories attribute '%s' is empty or not found", auth.UserIntegrityLevelAttribute)
+	}
+	integrityCategories, err := strconv.ParseUint(integrity, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse integrity categories for user: %w", err)
+	}
 
 	return &auth.UserHTTPSecurityContext{
-		RequestMethod:   httpMethod,
-		Categories:      label.Categories,
-		Confidentiality: label.Confidentiality,
-		Capabilities:    label.Capabilities,
-		Integrity:       label.Integrity,
+		RequestMethod:       httpMethod,
+		ConfidentialityMin:  label.ConfMin,
+		CategoriesMin:       label.CatsMin,
+		ConfidentialityMax:  label.ConfMax,
+		CategoriesMax:       label.CatsMax,
+		IntegrityCategories: uint32(integrityCategories),
 	}, nil
+}
+
+// extractHostFromRequest extracts the FQDN from the authorization request.
+// The Host header may contain port number (e.g., "example.com:8080"), which is stripped.
+func extractHostFromRequest(req *auth.AuthRequest) (string, error) {
+	hostHeader, ok := req.HTTPHeaders["host"]
+	if !ok || hostHeader == "" {
+		return "", errors.New("host header not present or empty in request")
+	}
+
+	parsed, err := url.Parse("http://" + hostHeader)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse host header: %w", err)
+	}
+
+	return parsed.Hostname(), nil
+}
+
+var validHTTPMethods = map[string]struct{}{
+	"GET":     {},
+	"POST":    {},
+	"PUT":     {},
+	"DELETE":  {},
+	"PATCH":   {},
+	"HEAD":    {},
+	"OPTIONS": {},
+	"TRACE":   {},
+	"CONNECT": {},
+}
+
+func validateHTTPMethod(method string) error {
+	if method == "" {
+		return errEmptyHTTPMethod
+	}
+
+	if _, ok := validHTTPMethods[strings.ToUpper(method)]; !ok {
+		return fmt.Errorf("invalid HTTP method: %s", method)
+	}
+
+	return nil
 }

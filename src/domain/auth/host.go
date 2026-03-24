@@ -1,28 +1,29 @@
 package auth
 
 const (
-	HostMacAttribute            = "x-ald-host-mac"
-	HostCapabilitiesAttribute   = "x-ald-host-caps"
-	HostIntegrityLevelAttribute = "x-ald-host-mic-level"
+	HostMacAttribute                 = "x-ald-host-mac"
+	HostIntegrityCategoriesAttribute = "x-ald-host-mic-level"
 )
 
 var AllMacHostAttributes []string = []string{
 	HostMacAttribute,
-	// HostCapabilitiesAttribute,
-	// HostIntegrityLevelAttribute,
+	HostIntegrityCategoriesAttribute,
 }
 
 type HostSecurityContext struct {
-	Categories      uint64
-	Confidentiality uint8
-	Capabilities    uint64
-	Integrity       uint32
+	ConfidentialityMin  uint8
+	CategoriesMin       uint64
+	ConfidentialityMax  uint8
+	CategoriesMax       uint64
+	IntegrityCategories uint32
 }
 
-func (hsc *HostSecurityContext) GetConfidentiality() uint8 { return hsc.Confidentiality }
+func (hsc *HostSecurityContext) GetConfidentialityMin() uint8 { return hsc.ConfidentialityMin }
 
-func (hsc *HostSecurityContext) GetCategories() uint64 { return hsc.Categories }
+func (hsc *HostSecurityContext) GetCategoriesMin() uint64 { return hsc.CategoriesMin }
 
-func (hsc *HostSecurityContext) GetCapabilities() uint64 { return hsc.Capabilities }
+func (hsc *HostSecurityContext) GetConfidentialityMax() uint8 { return hsc.ConfidentialityMax }
 
-func (hsc *HostSecurityContext) GetIntegrity() uint32 { return hsc.Integrity }
+func (hsc *HostSecurityContext) GetCategoriesMax() uint64 { return hsc.CategoriesMax }
+
+func (hsc *HostSecurityContext) GetIntegrityCategories() uint32 { return hsc.IntegrityCategories }

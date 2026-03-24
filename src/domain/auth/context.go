@@ -2,15 +2,17 @@ package auth
 
 // SecurityContext defines the interface for security context objects
 // used in Mandatory Access Control (MAC) decisions.
-// It provides access to the four key security attributes:
-// confidentiality level, integrity level, capabilities, and categories.
+// It provides access to the key security attributes:
+// confidentiality range (min/max), categories range (min/max), and integrity categories.
 type SecurityContext interface {
-	// GetConfidentiality returns the confidentiality level (0-255).
-	GetConfidentiality() uint8
-	// GetIntegrity returns the integrity level as a 32-bit value.
-	GetIntegrity() uint32
-	// GetCapabilities returns the capabilities bitmask.
-	GetCapabilities() uint64
-	// GetCategories returns the categories bitmask.
-	GetCategories() uint64
+	// GetConfidentialityMin returns the minimum confidentiality level (0-255).
+	GetConfidentialityMin() uint8
+	// GetCategoriesMin returns the minimum categories bitmask.
+	GetCategoriesMin() uint64
+	// GetConfidentialityMax returns the maximum confidentiality level (0-255).
+	GetConfidentialityMax() uint8
+	// GetCategoriesMax returns the maximum categories bitmask.
+	GetCategoriesMax() uint64
+	// GetIntegrityCategories returns the integrity categories bitmask.
+	GetIntegrityCategories() uint32
 }

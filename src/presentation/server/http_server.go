@@ -120,13 +120,6 @@ func (s *HTTPServer) Stop(ctx context.Context) error {
 	return nil
 }
 
-// IsRunning returns true if the server is currently running.
-func (s *HTTPServer) IsRunning() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.running
-}
-
 // HealthResponse represents the health check response.
 type HealthResponse struct {
 	Status     string                 `json:"status"`

@@ -1,7 +1,5 @@
 package auth
 
-// URIMatchType defines how the URI path in a MAC rule is matched against the request URI.
-// Mirrors the semantics of FreeIPA URI-based HBAC.
 type URIMatchType string
 
 const (
@@ -14,25 +12,19 @@ const (
 	URIMatchRegex URIMatchType = "regex"
 )
 
-// URISecurityContext holds the MAC label associated with a URI resource entry in LDAP.
-// It is stored as an auxiliary objectClass (aldURIContext) attached to a host entry.
 type URISecurityContext struct {
 	// Path is the URI path this context applies to.
-	Path            string
-	Categories      uint64
-	Confidentiality uint8
-	Capabilities    uint64
-	Integrity       uint32
+	Path                string
+	ConfidentialityMin  uint8
+	CategoriesMin       uint64
+	ConfidentialityMax  uint8
+	CategoriesMax       uint64
+	IntegrityCategories uint32
 }
 
 // URIMACRule represents a URI-based MAC rule stored in LDAP as an aldURIMACRule entry.
-// Unlike RBAC rules, a URI MAC rule carries a MAC label and is bound to hosts/host-groups,
-// not to users or user-groups.
 type URIMACRule struct {
-	// CN is the unique common name of the rule entry.
-	CN string
-	// URIPath is the URI path pattern this rule applies to.
-	// Its interpretation depends on MatchType.
+	CN      string
 	URIPath string
 	// MatchType controls how URIPath is matched: exact, prefix, or regex.
 	// Defaults to URIMatchExact when the LDAP attribute is absent.
@@ -42,48 +34,43 @@ type URIMACRule struct {
 	// HostFQDNs lists the FQDNs of hosts this rule is bound to.
 	HostFQDNs []string
 	// HostGroups lists the host-group CNs this rule is bound to.
-	HostGroups []string
-	// Description is an optional human-readable description.
+	HostGroups  []string
 	Description string
 }
 
 const (
-	// URIMacAttribute is the composite MAC label: confidentiality:categories:capabilities:integrity
-	URIMacAttribute = "x-ald-uri-mac"
-	// URIMatchTypeAttribute stores the match type: "exact" (default), "prefix", or "regex".
-	URIMatchTypeAttribute = "x-ald-uri-match-type"
-	// URIDescriptionAttribute is an optional human-readable description of the URI resource.
+	URIMacAttribute         = "x-ald-uri-mac"
+	URIMatchTypeAttribute   = "x-ald-uri-match-type"
 	URIDescriptionAttribute = "x-ald-uri-description"
-	// URIPathAttribute stores the URI path (exact string, prefix, or regex pattern).
-	URIPathAttribute = "x-ald-uri-path"
-	// URIHostAttribute lists the host FQDNs this MAC rule is bound to (multi-value).
-	URIHostAttribute = "x-ald-uri-host"
-	// URIHostGroupAttribute lists the host-group CNs this MAC rule is bound to (multi-value).
-	URIHostGroupAttribute = "x-ald-uri-hostgroup"
+	URIHostAttribute        = "x-ald-uri-memberHost"
+	URIHostGroupAttribute   = "x-ald-uri-memberHostGroup"
 )
 
 // AllMacURIAttributes contains all MAC-related attributes for URI resources (aldURIContext).
-var AllMacURIAttributes []string = []string{
-	URIMacAttribute,
-	URIMatchTypeAttribute,
-	URIDescriptionAttribute,
-}
-
-// AllURIMACRuleAttributes contains all attributes for URI MAC rule entries (aldURIMACRule).
-var AllURIMACRuleAttributes []string = []string{
+var AllURIAttributes []string = []string{
 	"cn",
 	URIMacAttribute,
-	URIPathAttribute,
 	URIMatchTypeAttribute,
 	URIHostAttribute,
 	URIHostGroupAttribute,
 	URIDescriptionAttribute,
 }
 
-func (usc *URISecurityContext) GetConfidentiality() uint8 { return usc.Confidentiality }
+// AllURIMACRuleAttributes contains all attributes for URI MAC rule entries (aldURIMACRule).
+var AllURIMACAttributes []string = []string{
+	"cn",
+	URIMacAttribute,
+	URIMatchTypeAttribute,
+	URIHostAttribute,
+	URIHostGroupAttribute,
+}
 
-func (usc *URISecurityContext) GetCategories() uint64 { return usc.Categories }
+func (usc *URISecurityContext) GetConfidentialityMin() uint8 { return usc.ConfidentialityMin }
 
-func (usc *URISecurityContext) GetCapabilities() uint64 { return usc.Capabilities }
+func (usc *URISecurityContext) GetCategoriesMin() uint64 { return usc.CategoriesMin }
 
-func (usc *URISecurityContext) GetIntegrity() uint32 { return usc.Integrity }
+func (usc *URISecurityContext) GetConfidentialityMax() uint8 { return usc.ConfidentialityMax }
+
+func (usc *URISecurityContext) GetCategoriesMax() uint64 { return usc.CategoriesMax }
+
+func (usc *URISecurityContext) GetIntegrityCategories() uint32 { return usc.IntegrityCategories }

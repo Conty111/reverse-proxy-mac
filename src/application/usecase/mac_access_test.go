@@ -23,54 +23,57 @@ func (s *MACAccessSuite) BeforeAll(t provider.T) {
 
 // TestMACAuthorizationDeniedReadOperation tests MAC denial for read operations
 func (s *MACAccessSuite) TestMACAuthorizationDeniedReadOperation(t provider.T) {
-	t.Title("MAC Denied - Read Operation (User Level < Host Level)")
-	t.Description("Should deny access when user confidentiality level is lower than host level for read operations")
+	t.Title("MAC Denied - Read Operation (Ranges do not overlap)")
+	t.Description("Should deny access when user confidentiality range does not overlap with host range for read operations")
 	t.Tags("authorization", "mac", "negative")
 	t.Severity(allure.BLOCKER)
 
 	// Test the checkAccessHTTP function directly
 	userCtx := &auth.UserHTTPSecurityContext{
-		RequestMethod:   "GET",
-		Confidentiality: 1, // User level 1
-		Categories:      0xFF,
-		Capabilities:    0xFF,
-		Integrity:       0xFF,
+		RequestMethod:       "GET",
+		ConfidentialityMin:  1,
+		ConfidentialityMax:  1, // User range [1, 1]
+		CategoriesMin:       0xFF,
+		CategoriesMax:       0xFF,
+		IntegrityCategories: 0xFF,
 	}
 
 	hostCtx := &auth.HostSecurityContext{
-		Confidentiality: 2, // Host level 2 (higher than user)
-		Categories:      0,
-		Capabilities:    0,
-		Integrity:       0,
+		ConfidentialityMin:  2,
+		ConfidentialityMax:  3, // Host range [2, 3] (no overlap)
+		CategoriesMin:       0,
+		CategoriesMax:       0,
+		IntegrityCategories: 0,
 	}
 
 	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
 
 	t.Assert().False(allowed)
-	t.Assert().Contains(reason, "user level")
-	t.Assert().Contains(reason, "host level")
+	t.Assert().Contains(reason, "does not overlap")
 }
 
 // TestMACAuthorizationDeniedWriteOperation tests MAC denial for write operations
 func (s *MACAccessSuite) TestMACAuthorizationDeniedWriteOperation(t provider.T) {
-	t.Title("MAC Denied - Write Operation (User Level != Host Level)")
-	t.Description("Should deny access when user level doesn't equal host level for write operations")
+	t.Title("MAC Denied - Write Operation (Ranges do not match exactly)")
+	t.Description("Should deny access when user range doesn't exactly match host range for write operations")
 	t.Tags("authorization", "mac", "negative", "write")
 	t.Severity(allure.BLOCKER)
 
 	userCtx := &auth.UserHTTPSecurityContext{
-		RequestMethod:   "POST",
-		Confidentiality: 3, // User level 3
-		Categories:      0xFF,
-		Capabilities:    0xFF,
-		Integrity:       0xFF,
+		RequestMethod:       "POST",
+		ConfidentialityMin:  2,
+		ConfidentialityMax:  3, // User range [2, 3]
+		CategoriesMin:       0xFF,
+		CategoriesMax:       0xFF,
+		IntegrityCategories: 0xFF,
 	}
 
 	hostCtx := &auth.HostSecurityContext{
-		Confidentiality: 2, // Host level 2 (different from user)
-		Categories:      0,
-		Capabilities:    0,
-		Integrity:       0,
+		ConfidentialityMin:  2,
+		ConfidentialityMax:  2, // Host range [2, 2] (different)
+		CategoriesMin:       0,
+		CategoriesMax:       0,
+		IntegrityCategories: 0,
 	}
 
 	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
@@ -87,18 +90,20 @@ func (s *MACAccessSuite) TestMACAuthorizationDeniedCategories(t provider.T) {
 	t.Severity(allure.BLOCKER)
 
 	userCtx := &auth.UserHTTPSecurityContext{
-		RequestMethod:   "GET",
-		Confidentiality: 2,
-		Categories:      0x0F, // User has only lower bits
-		Capabilities:    0xFF,
-		Integrity:       0xFF,
+		RequestMethod:       "GET",
+		ConfidentialityMin:  2,
+		ConfidentialityMax:  2,
+		CategoriesMin:       0x0F,
+		CategoriesMax:       0x0F, // User has only lower bits
+		IntegrityCategories: 0xFF,
 	}
 
 	hostCtx := &auth.HostSecurityContext{
-		Confidentiality: 2,
-		Categories:      0xFF, // Host requires more bits
-		Capabilities:    0,
-		Integrity:       0,
+		ConfidentialityMin:  2,
+		ConfidentialityMax:  2,
+		CategoriesMin:       0xFF, // Host requires more bits
+		CategoriesMax:       0xFF,
+		IntegrityCategories: 0,
 	}
 
 	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
@@ -109,58 +114,32 @@ func (s *MACAccessSuite) TestMACAuthorizationDeniedCategories(t provider.T) {
 
 // TestMACAuthorizationDeniedIntegrity tests MAC denial due to insufficient integrity level
 func (s *MACAccessSuite) TestMACAuthorizationDeniedIntegrity(t provider.T) {
-	t.Title("MAC Denied - Insufficient Integrity Level")
-	t.Description("Should deny access when user integrity level is lower than host integrity level")
+	t.Title("MAC Denied - Insufficient Integrity Categories")
+	t.Description("Should deny access when user integrity categories do not include all host integrity categories")
 	t.Tags("authorization", "mac", "negative", "integrity")
 	t.Severity(allure.BLOCKER)
 
 	userCtx := &auth.UserHTTPSecurityContext{
-		RequestMethod:   "GET",
-		Confidentiality: 2,
-		Categories:      0xFF,
-		Capabilities:    0xFF,
-		Integrity:       0x10, // Low integrity
+		RequestMethod:       "GET",
+		ConfidentialityMin:  2,
+		ConfidentialityMax:  2,
+		CategoriesMin:       0xFF,
+		CategoriesMax:       0xFF,
+		IntegrityCategories: 0x10, // Low integrity
 	}
 
 	hostCtx := &auth.HostSecurityContext{
-		Confidentiality: 2,
-		Categories:      0,
-		Capabilities:    0,
-		Integrity:       0xFF, // High integrity required
+		ConfidentialityMin:  2,
+		ConfidentialityMax:  2,
+		CategoriesMin:       0,
+		CategoriesMax:       0,
+		IntegrityCategories: 0xFF, // High integrity required
 	}
 
 	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
 
 	t.Assert().False(allowed)
 	t.Assert().Contains(reason, "integrity")
-}
-
-// TestMACAuthorizationDeniedCapabilities tests MAC denial due to missing capabilities
-func (s *MACAccessSuite) TestMACAuthorizationDeniedCapabilities(t provider.T) {
-	t.Title("MAC Denied - Missing Required Capabilities")
-	t.Description("Should deny access when user doesn't have all required capabilities")
-	t.Tags("authorization", "mac", "negative", "capabilities")
-	t.Severity(allure.BLOCKER)
-
-	userCtx := &auth.UserHTTPSecurityContext{
-		RequestMethod:   "GET",
-		Confidentiality: 2,
-		Categories:      0xFF,
-		Capabilities:    0x0F, // Limited capabilities
-		Integrity:       0xFF,
-	}
-
-	hostCtx := &auth.HostSecurityContext{
-		Confidentiality: 2,
-		Categories:      0,
-		Capabilities:    0xFF, // More capabilities required
-		Integrity:       0,
-	}
-
-	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
-
-	t.Assert().False(allowed)
-	t.Assert().Contains(reason, "capabilities")
 }
 
 // TestSuccessfulMACAuthorizationReadOperation tests successful MAC authorization for read operations
@@ -171,18 +150,20 @@ func (s *MACAccessSuite) TestSuccessfulMACAuthorizationReadOperation(t provider.
 	t.Severity(allure.BLOCKER)
 
 	userCtx := &auth.UserHTTPSecurityContext{
-		RequestMethod:   "GET",
-		Confidentiality: 3, // User level >= host level
-		Categories:      0xFF,
-		Capabilities:    0xFF,
-		Integrity:       0xFF,
+		RequestMethod:       "GET",
+		ConfidentialityMin:  1,
+		ConfidentialityMax:  3, // User range [1, 3] overlaps with [2, 2]
+		CategoriesMin:       0xFF,
+		CategoriesMax:       0xFF,
+		IntegrityCategories: 0xFF,
 	}
 
 	hostCtx := &auth.HostSecurityContext{
-		Confidentiality: 2,
-		Categories:      0x0F,
-		Capabilities:    0x0F,
-		Integrity:       0x0F,
+		ConfidentialityMin:  2,
+		ConfidentialityMax:  2,
+		CategoriesMin:       0x0F,
+		CategoriesMax:       0x0F,
+		IntegrityCategories: 0x0F,
 	}
 
 	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
@@ -194,7 +175,7 @@ func (s *MACAccessSuite) TestSuccessfulMACAuthorizationReadOperation(t provider.
 // TestSuccessfulMACAuthorizationWriteOperation tests successful MAC authorization for write operations
 func (s *MACAccessSuite) TestSuccessfulMACAuthorizationWriteOperation(t provider.T) {
 	t.Title("MAC Allow - Write Operation")
-	t.Description("Should allow access when user level equals host level for write operation")
+	t.Description("Should allow access when user range equals host range for write operation")
 	t.Tags("authorization", "mac", "positive", "write")
 	t.Severity(allure.BLOCKER)
 
@@ -203,18 +184,20 @@ func (s *MACAccessSuite) TestSuccessfulMACAuthorizationWriteOperation(t provider
 	for _, method := range writeMethods {
 		t.WithNewStep("Test "+method+" method", func(sCtx provider.StepCtx) {
 			userCtx := &auth.UserHTTPSecurityContext{
-				RequestMethod:   method,
-				Confidentiality: 2, // User level == host level
-				Categories:      0xFF,
-				Capabilities:    0xFF,
-				Integrity:       0xFF,
+				RequestMethod:       method,
+				ConfidentialityMin:  2,
+				ConfidentialityMax:  3, // User range == host range
+				CategoriesMin:       0xFF,
+				CategoriesMax:       0xFF,
+				IntegrityCategories: 0xFF,
 			}
 
 			hostCtx := &auth.HostSecurityContext{
-				Confidentiality: 2,
-				Categories:      0x0F,
-				Capabilities:    0x0F,
-				Integrity:       0x0F,
+				ConfidentialityMin:  2,
+				ConfidentialityMax:  3,
+				CategoriesMin:       0xFF,
+				CategoriesMax:       0xFF,
+				IntegrityCategories: 0x0F,
 			}
 
 			allowed, reason := checkAccessHTTP(userCtx, hostCtx)
@@ -234,18 +217,20 @@ func (s *MACAccessSuite) TestCheckMACAccessEdgeCases(t provider.T) {
 
 	t.WithNewStep("Test zero values - should allow", func(sCtx provider.StepCtx) {
 		userCtx := &auth.UserHTTPSecurityContext{
-			RequestMethod:   "GET",
-			Confidentiality: 0,
-			Categories:      0,
-			Capabilities:    0,
-			Integrity:       0,
+			RequestMethod:       "GET",
+			ConfidentialityMin:  0,
+			ConfidentialityMax:  0,
+			CategoriesMin:       0,
+			CategoriesMax:       0,
+			IntegrityCategories: 0,
 		}
 
 		hostCtx := &auth.HostSecurityContext{
-			Confidentiality: 0,
-			Categories:      0,
-			Capabilities:    0,
-			Integrity:       0,
+			ConfidentialityMin:  0,
+			ConfidentialityMax:  0,
+			CategoriesMin:       0,
+			CategoriesMax:       0,
+			IntegrityCategories: 0,
 		}
 
 		allowed, _ := checkMACAccess(userCtx, hostCtx, false)
@@ -254,18 +239,20 @@ func (s *MACAccessSuite) TestCheckMACAccessEdgeCases(t provider.T) {
 
 	t.WithNewStep("Test max values - should allow", func(sCtx provider.StepCtx) {
 		userCtx := &auth.UserHTTPSecurityContext{
-			RequestMethod:   "GET",
-			Confidentiality: 255,
-			Categories:      0xFFFFFFFFFFFFFFFF,
-			Capabilities:    0xFFFFFFFFFFFFFFFF,
-			Integrity:       0xFFFFFFFF,
+			RequestMethod:       "GET",
+			ConfidentialityMin:  255,
+			ConfidentialityMax:  255,
+			CategoriesMin:       0xFFFFFFFFFFFFFFFF,
+			CategoriesMax:       0xFFFFFFFFFFFFFFFF,
+			IntegrityCategories: 0xFFFFFFFF,
 		}
 
 		hostCtx := &auth.HostSecurityContext{
-			Confidentiality: 255,
-			Categories:      0xFFFFFFFFFFFFFFFF,
-			Capabilities:    0xFFFFFFFFFFFFFFFF,
-			Integrity:       0xFFFFFFFF,
+			ConfidentialityMin:  255,
+			ConfidentialityMax:  255,
+			CategoriesMin:       0xFFFFFFFFFFFFFFFF,
+			CategoriesMax:       0xFFFFFFFFFFFFFFFF,
+			IntegrityCategories: 0xFFFFFFFF,
 		}
 
 		allowed, _ := checkMACAccess(userCtx, hostCtx, false)

@@ -87,11 +87,12 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 	}
 
 	a.logger.Debug(ctx, "Source host security context retrieved", map[string]interface{}{
-		"fqdn":         sourceFQDN,
-		"level":        sourceSecCtx.Confidentiality,
-		"categories":   fmt.Sprintf("0x%x", sourceSecCtx.Categories),
-		"capabilities": sourceSecCtx.Capabilities,
-		"integrity":    fmt.Sprintf("0x%x", sourceSecCtx.Integrity),
+		"fqdn":           sourceFQDN,
+		"conf_min":       sourceSecCtx.ConfidentialityMin,
+		"cats_min":       fmt.Sprintf("0x%x", sourceSecCtx.CategoriesMin),
+		"conf_max":       sourceSecCtx.ConfidentialityMax,
+		"cats_max":       fmt.Sprintf("0x%x", sourceSecCtx.CategoriesMax),
+		"integrity_cats": fmt.Sprintf("0x%x", sourceSecCtx.IntegrityCategories),
 	})
 
 	// Get destination host security context
@@ -110,11 +111,12 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 	}
 
 	a.logger.Debug(ctx, "Destination host security context retrieved", map[string]interface{}{
-		"fqdn":         destFQDN,
-		"level":        destSecCtx.Confidentiality,
-		"categories":   fmt.Sprintf("0x%x", destSecCtx.Categories),
-		"capabilities": destSecCtx.Capabilities,
-		"integrity":    fmt.Sprintf("0x%x", destSecCtx.Integrity),
+		"fqdn":           destFQDN,
+		"conf_min":       destSecCtx.ConfidentialityMin,
+		"cats_min":       fmt.Sprintf("0x%x", destSecCtx.CategoriesMin),
+		"conf_max":       destSecCtx.ConfidentialityMax,
+		"cats_max":       fmt.Sprintf("0x%x", destSecCtx.CategoriesMax),
+		"integrity_cats": fmt.Sprintf("0x%x", destSecCtx.IntegrityCategories),
 	})
 
 	// Perform MAC authorization check (host-to-host)
