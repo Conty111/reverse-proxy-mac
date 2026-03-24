@@ -18,6 +18,7 @@ import (
 type Client struct {
 	host              string
 	port              int
+	baseDN            string
 	useTLS            bool
 	tlsConfig         *tls.Config
 	keytab            *keytab.Keytab
@@ -35,6 +36,7 @@ func NewClient(cfg *config.LDAPConfig, log logger.Logger) (*Client, error) {
 	c := &Client{
 		host:   cfg.Host,
 		port:   cfg.Port,
+		baseDN: cfg.BaseDN,
 		useTLS: cfg.TLS,
 		Logger: log,
 	}
