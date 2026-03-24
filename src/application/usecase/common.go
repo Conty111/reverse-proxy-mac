@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"reverse-proxy-mac/src/domain/auth"
@@ -91,10 +92,15 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 		return nil, fmt.Errorf("failed to parse MAC label for host: %w", err)
 	}
 
-	// Integrity categories are stored separately, but for now we'll just set it to 0
-	// as it's not part of the 4-part MAC label anymore.
-	// If it's stored in another attribute, it should be fetched here.
 	var integrityCategories uint32 = 0
+	categoryAttribute := hostEntry.GetAttributeValue(auth.HostIntegrityCategoriesAttribute)
+	if categoryAttribute != "" {
+		category, err := strconv.ParseUint(categoryAttribute, 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse integrity categories for host: %w", err)
+		}
+		integrityCategories = uint32(category)
+	}
 
 	return &auth.HostSecurityContext{
 		ConfidentialityMin:  label.ConfMin,
@@ -106,37 +112,48 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 }
 
 func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool) (bool, string) {
+	objectConfMin := object.GetConfidentialityMin()
+	objectConfMax := object.GetConfidentialityMax()
+	objectCatsMin := object.GetCategoriesMin()
+
+	subjectConfMin := subject.GetConfidentialityMin()
+	subjectConfMax := subject.GetConfidentialityMax()
+	subjectCatsMin := subject.GetCategoriesMin()
+	subjectCatsMax := subject.GetCategoriesMax()
+
 	if isWriteOperation {
 		// Write operations: exact match required for confidentiality and categories
-		if subject.GetConfidentialityMin() != object.GetConfidentialityMin() || subject.GetConfidentialityMax() != object.GetConfidentialityMax() {
+		if subjectConfMin != objectConfMin || subjectConfMax != objectConfMax {
 			return false, fmt.Sprintf("MAC: write operation denied - user confidentiality range [%d, %d] != object range [%d, %d]",
-				subject.GetConfidentialityMin(), subject.GetConfidentialityMax(), object.GetConfidentialityMin(), object.GetConfidentialityMax())
+				subjectConfMin, subjectConfMax, objectConfMin, objectConfMax)
 		}
-		if subject.GetCategoriesMin() != object.GetCategoriesMin() {
+		if subjectCatsMin != objectCatsMin {
 			return false, fmt.Sprintf("MAC: write operation denied - user categories min 0x%x != object categories min 0x%x",
-				subject.GetCategoriesMin(), object.GetCategoriesMin())
+				subjectCatsMin, objectCatsMin)
 		}
 	} else {
 		// Read operations: ranges must overlap
 		// object.ConfMin <= user.ConfMax AND user.ConfMin <= object.ConfMax
-		if object.GetConfidentialityMin() > subject.GetConfidentialityMax() || subject.GetConfidentialityMin() > object.GetConfidentialityMax() {
+		if objectConfMin > subjectConfMax || subjectConfMin > objectConfMax {
 			return false, fmt.Sprintf("MAC: read operation denied - user confidentiality range [%d, %d] does not overlap with object range [%d, %d]",
-				subject.GetConfidentialityMin(), subject.GetConfidentialityMax(), object.GetConfidentialityMin(), object.GetConfidentialityMax())
+				subjectConfMin, subjectConfMax, objectConfMin, objectConfMax)
 		}
 
 		// User must have all categories that the object requires (min categories)
 		// (user.CategoriesMax & object.CategoriesMin) == object.CategoriesMin
-		if (subject.GetCategoriesMax() & object.GetCategoriesMin()) != object.GetCategoriesMin() {
+		if (subjectCatsMax & objectCatsMin) != objectCatsMin {
 			return false, fmt.Sprintf("MAC: read operation denied - user categories max 0x%x do not include all required object categories min 0x%x",
-				subject.GetCategoriesMax(), object.GetCategoriesMin())
+				subjectCatsMax, objectCatsMin)
 		}
 	}
 
 	// Check integrity categories
 	// User's integrity categories must include all bits of object's integrity categories
-	if (subject.GetIntegrityCategories() & object.GetIntegrityCategories()) != object.GetIntegrityCategories() {
+	subjectIntegrityCategories := subject.GetIntegrityCategories()
+	objectIntegrityCategories := object.GetIntegrityCategories()
+	if (subjectIntegrityCategories & objectIntegrityCategories) != objectIntegrityCategories {
 		return false, fmt.Sprintf("MAC: access denied - user integrity categories 0x%x do not include all required object integrity categories 0x%x",
-			subject.GetIntegrityCategories(), object.GetIntegrityCategories())
+			subjectIntegrityCategories, objectIntegrityCategories)
 	}
 
 	return true, "MAC: access granted - all security checks passed"
