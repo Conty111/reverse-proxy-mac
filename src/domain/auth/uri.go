@@ -40,6 +40,7 @@ type URIMACRule struct {
 
 const (
 	URIMacAttribute         = "x-ald-uri-mac"
+	URIPathAttribute        = "x-ald-uri-path"
 	URIMatchTypeAttribute   = "x-ald-uri-match-type"
 	URIDescriptionAttribute = "x-ald-uri-description"
 	URIHostAttribute        = "x-ald-uri-memberHost"
@@ -50,6 +51,7 @@ const (
 var AllURIAttributes []string = []string{
 	"cn",
 	URIMacAttribute,
+	URIPathAttribute,
 	URIMatchTypeAttribute,
 	URIHostAttribute,
 	URIHostGroupAttribute,
@@ -60,6 +62,7 @@ var AllURIAttributes []string = []string{
 var AllURIMACAttributes []string = []string{
 	"cn",
 	URIMacAttribute,
+	URIPathAttribute,
 	URIMatchTypeAttribute,
 	URIHostAttribute,
 	URIHostGroupAttribute,

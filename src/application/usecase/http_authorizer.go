@@ -217,7 +217,7 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 	if integrity == "" {
 		return nil, fmt.Errorf("user integrity categories attribute '%s' is empty or not found", auth.UserIntegrityLevelAttribute)
 	}
-	integrityCategories, err := strconv.ParseUint(integrity, 10, 32)
+	integrityCategories, err := strconv.ParseUint(integrity, 0, 32)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse integrity categories for user: %w", err)
 	}

@@ -1,6 +1,6 @@
 module reverse-proxy-mac
 
-go 1.25.5
+go 1.26.1
 
 require (
 	github.com/envoyproxy/go-control-plane v0.12.0

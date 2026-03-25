@@ -39,11 +39,34 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 		attributes,
 		nil,
 	)
-	result, err := cl.ldapConnection.Search(searchRequest)
+
+	cl.connMu.RLock()
+	conn := cl.ldapConnection
+	cl.connMu.RUnlock()
+
+	result, err := conn.Search(searchRequest)
+
 	if err != nil {
 		cl.Logger.Error(ctx, "LDAP search request failed", map[string]interface{}{
 			"error": err.Error(),
 		})
+
+		if ldap.IsErrorWithCode(err, ldap.ErrorNetwork) {
+			// if reconnErr := cl.reconnect(ctx); reconnErr != nil {
+			// 	return nil, fmt.Errorf("LDAP search failed: %w (reconnect: %v)", err, reconnErr)
+			// }
+
+			cl.Logger.Error(ctx, fmt.Sprintf("Needs reconnect with LDAP: %s", err.Error()), map[string]interface{}{})
+			// if err != nil {
+			// 	cl.Logger.Error(ctx, "LDAP search request failed after reconnect", map[string]interface{}{
+			// 		"error": err.Error(),
+			// 	})
+			// 	return nil, fmt.Errorf("LDAP search failed after reconnect: %w", err)
+			// }
+
+			// return result.Entries, nil
+		}
+
 		return nil, fmt.Errorf("LDAP search failed: %w", err)
 	}
 

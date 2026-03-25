@@ -95,7 +95,7 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 	var integrityCategories uint32 = 0
 	categoryAttribute := hostEntry.GetAttributeValue(auth.HostIntegrityCategoriesAttribute)
 	if categoryAttribute != "" {
-		category, err := strconv.ParseUint(categoryAttribute, 10, 32)
+		category, err := strconv.ParseUint(categoryAttribute, 0, 32)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse integrity categories for host: %w", err)
 		}

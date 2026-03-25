@@ -28,8 +28,8 @@ type Client struct {
 	Logger logger.Logger
 
 	gssApiClient   ldap.GSSAPIClient
-	ldapConnection *ldap.Conn
 	connMu         sync.RWMutex
+	ldapConnection *ldap.Conn
 }
 
 func NewClient(cfg *config.LDAPConfig, log logger.Logger) (*Client, error) {
@@ -62,7 +62,6 @@ func NewClient(cfg *config.LDAPConfig, log logger.Logger) (*Client, error) {
 	return c, nil
 }
 
-// Close cleans up resources used by the LDAP client.
 func (cl *Client) Close() error {
 	cl.connMu.Lock()
 	defer cl.connMu.Unlock()
@@ -79,17 +78,10 @@ func (cl *Client) Close() error {
 	return nil
 }
 
-// GetConnection returns the current LDAP connection with read lock.
-func (cl *Client) GetConnection() *ldap.Conn {
-	cl.connMu.RLock()
-	defer cl.connMu.RUnlock()
-	return cl.ldapConnection
-}
-
-// IsConnected returns true if the LDAP client has an active connection.
 func (cl *Client) IsConnected() bool {
 	cl.connMu.RLock()
 	defer cl.connMu.RUnlock()
+
 	return cl.ldapConnection != nil
 }
 

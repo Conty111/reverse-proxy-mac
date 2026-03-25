@@ -17,6 +17,7 @@
     },
     "port": 636,
     "host": "dc-1.ald.company.lan",
+    "base_dn": "dc=ald,dc=company,dc=lan",
     "tls": true,
     "tls_skip_verify": true,
     "tls_ca_cert_file": ""

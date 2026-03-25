@@ -94,6 +94,18 @@ URI-based MAC (по аналогии с [URI-based HBAC](https://www.freeipa.org
     systemctl restart dirsrv@ALD-COMPANY-LAN.service
     ```
 
+3. Создайте временный файл с содержимым файла [74x-ald-uri-mac.ldif](../../74x-ald-uri-mac.ldif) (напимер, в `/tmp/74x-ald-uri-mac.ldif`)
+4. Модифицируйте реферальные ссылки для атрибутов
+    
+    С вводом пароля администратора:
+    ```bash
+    ldapmodify -x -D "cn=Directory Manager" -W -f /tmp/74x-ald-uri-references.ldif
+    ```
+    Или с GSSAPI:
+    ```bash
+    ldapmodify -Y GSSAPI -f /tmp/74x-ald-uri-references.ldif
+    ```
+
 ### Создание URI MAC-правил
 
 **Точное совпадение** — доступ к `/api/secret` только для уровня 2+:

@@ -1,0 +1,5 @@
+dn: cn=referential integrity postoperation,cn=plugins,cn=config
+changetype: modify
+add: referint-membership-attr
+referint-membership-attr: x-ald-uri-memberHost
+referint-membership-attr: x-ald-uri-memberHostGroup
