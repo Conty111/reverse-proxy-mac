@@ -31,10 +31,8 @@ type URIMACRule struct {
 	MatchType URIMatchType
 	// MACLabel is the mandatory access control label for this URI resource.
 	MACLabel URISecurityContext
-	// HostFQDNs lists the FQDNs of hosts this rule is bound to.
-	HostFQDNs []string
-	// HostGroups lists the host-group CNs this rule is bound to.
-	HostGroups  []string
+	// ServiceRefs lists the DNs of HTTP service principals this rule is bound to.
+	ServiceRefs []string
 	Description string
 }
 
@@ -43,8 +41,7 @@ const (
 	URIPathAttribute        = "x-ald-uri-path"
 	URIMatchTypeAttribute   = "x-ald-uri-match-type"
 	URIDescriptionAttribute = "x-ald-uri-description"
-	URIHostAttribute        = "x-ald-uri-memberHost"
-	URIHostGroupAttribute   = "x-ald-uri-memberHostGroup"
+	URIServiceRefAttribute  = "x-ald-uri-service-ref"
 )
 
 // AllMacURIAttributes contains all MAC-related attributes for URI resources (aldURIContext).
@@ -53,8 +50,7 @@ var AllURIAttributes []string = []string{
 	URIMacAttribute,
 	URIPathAttribute,
 	URIMatchTypeAttribute,
-	URIHostAttribute,
-	URIHostGroupAttribute,
+	URIServiceRefAttribute,
 	URIDescriptionAttribute,
 }
 
@@ -64,8 +60,7 @@ var AllURIMACAttributes []string = []string{
 	URIMacAttribute,
 	URIPathAttribute,
 	URIMatchTypeAttribute,
-	URIHostAttribute,
-	URIHostGroupAttribute,
+	URIServiceRefAttribute,
 }
 
 func (usc *URISecurityContext) GetConfidentialityMin() uint8 { return usc.ConfidentialityMin }

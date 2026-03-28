@@ -217,12 +217,12 @@ objectClass: aldURIMACRule
 cn: rule-api-secret
 x-ald-uri-path: /api/secret
 x-ald-uri-mac: 2:0x1:3:0xFF
-x-ald-uri-memberHost: fqdn=${TEST_HOST_MID},cn=computers,cn=accounts,${BASE_DN}
+x-ald-uri-service-ref: krbprincipalname=HTTP/${TEST_HOST_MID}@${REALM},cn=services,cn=accounts,${BASE_DN}
 x-ald-uri-description: Тестовое правило - точное совпадение /api/secret
 EOF
 ```
 
-#### Правило с префиксным совпадением (prefix)
+#### Правило с префиксным совпадением (prefix), привязанное к нескольким службам
 
 ```bash
 ldapadd -Y GSSAPI <<EOF
@@ -233,8 +233,8 @@ cn: rule-api-admin
 x-ald-uri-path: /api/admin
 x-ald-uri-mac: 1:0x0:2:0x3
 x-ald-uri-match-type: prefix
-x-ald-uri-memberHost: fqdn=${TEST_HOST_MID},cn=computers,cn=accounts,${BASE_DN}
-x-ald-uri-memberHost: fqdn=${TEST_HOST_HIGH},cn=computers,cn=accounts,${BASE_DN}
+x-ald-uri-service-ref: krbprincipalname=HTTP/${TEST_HOST_MID}@${REALM},cn=services,cn=accounts,${BASE_DN}
+x-ald-uri-service-ref: krbprincipalname=HTTP/${TEST_HOST_HIGH}@${REALM},cn=services,cn=accounts,${BASE_DN}
 x-ald-uri-description: Тестовое правило - префикс /api/admin/*
 EOF
 ```
@@ -250,20 +250,14 @@ cn: rule-api-users-regex
 x-ald-uri-path: /api/v[0-9]+/users/[0-9]+
 x-ald-uri-mac: 1:0x1:2:0x1
 x-ald-uri-match-type: regex
-x-ald-uri-memberHost: fqdn=${TEST_HOST_MID},cn=computers,cn=accounts,${BASE_DN}
+x-ald-uri-service-ref: krbprincipalname=HTTP/${TEST_HOST_MID}@${REALM},cn=services,cn=accounts,${BASE_DN}
 x-ald-uri-description: Тестовое правило - regex для /api/v*/users/*
 EOF
 ```
 
-#### Правило для группы хостов
+#### Правило для нескольких служб (reports)
 
 ```bash
-# Создание группы хостов
-ipa hostgroup-add test-web-servers --desc="Тестовая группа веб-серверов"
-ipa hostgroup-add-member test-web-servers --hosts=${TEST_HOST_MID}
-ipa hostgroup-add-member test-web-servers --hosts=${TEST_HOST_HIGH}
-
-# Создание правила для группы
 ldapadd -Y GSSAPI <<EOF
 dn: cn=rule-api-reports,cn=uri-mac-rules,cn=accounts,${BASE_DN}
 objectClass: top
@@ -272,8 +266,9 @@ cn: rule-api-reports
 x-ald-uri-path: /api/reports
 x-ald-uri-mac: 2:0x0:3:0xFF
 x-ald-uri-match-type: prefix
-x-ald-uri-memberHostGroup: cn=test-web-servers,cn=hostgroups,cn=accounts,${BASE_DN}
-x-ald-uri-description: Тестовое правило для группы хостов
+x-ald-uri-service-ref: krbprincipalname=HTTP/${TEST_HOST_MID}@${REALM},cn=services,cn=accounts,${BASE_DN}
+x-ald-uri-service-ref: krbprincipalname=HTTP/${TEST_HOST_HIGH}@${REALM},cn=services,cn=accounts,${BASE_DN}
+x-ald-uri-description: Тестовое правило для нескольких служб
 EOF
 ```
 
@@ -574,12 +569,12 @@ ldapsearch -Y GSSAPI \
 ldapsearch -Y GSSAPI \
   -b "cn=uri-mac-rules,cn=accounts,${BASE_DN}" \
   "(objectClass=aldURIMACRule)" \
-  cn x-ald-uri-path x-ald-uri-mac x-ald-uri-match-type x-ald-uri-memberHost x-ald-uri-memberHostGroup x-ald-uri-description
+  cn x-ald-uri-path x-ald-uri-mac x-ald-uri-match-type x-ald-uri-service-ref x-ald-uri-description
 
-# Правила для конкретного хоста
+# Правила для конкретной HTTP-службы
 ldapsearch -Y GSSAPI \
   -b "cn=uri-mac-rules,cn=accounts,${BASE_DN}" \
-  "(&(objectClass=aldURIMACRule)(x-ald-uri-memberHost=fqdn=${TEST_HOST_MID},cn=computers,cn=accounts,${BASE_DN}))" \
+  "(&(objectClass=aldURIMACRule)(x-ald-uri-service-ref=krbprincipalname=HTTP/${TEST_HOST_MID}@${REALM},cn=services,cn=accounts,${BASE_DN}))" \
   cn x-ald-uri-path x-ald-uri-mac
 
 # Правила с определённым типом сопоставления
@@ -588,17 +583,17 @@ ldapsearch -Y GSSAPI \
   "(&(objectClass=aldURIMACRule)(x-ald-uri-match-type=prefix))" \
   cn x-ald-uri-path x-ald-uri-mac
 
-# Правила для группы хостов
+# Правила с несколькими привязанными службами
 ldapsearch -Y GSSAPI \
   -b "cn=uri-mac-rules,cn=accounts,${BASE_DN}" \
-  "(&(objectClass=aldURIMACRule)(x-ald-uri-memberHostGroup=*))" \
-  cn x-ald-uri-path x-ald-uri-memberHostGroup
+  "(&(objectClass=aldURIMACRule)(x-ald-uri-service-ref=*))" \
+  cn x-ald-uri-path x-ald-uri-service-ref
 
 # Поиск правила по имени
 ldapsearch -Y GSSAPI \
   -b "cn=uri-mac-rules,cn=accounts,${BASE_DN}" \
   "(cn=rule-api-secret)" \
-  cn x-ald-uri-path x-ald-uri-mac x-ald-uri-match-type x-ald-uri-memberHost
+  cn x-ald-uri-path x-ald-uri-mac x-ald-uri-match-type x-ald-uri-service-ref
 
 # Поиск правил по URI-пути (точное совпадение)
 ldapsearch -Y GSSAPI \
@@ -613,20 +608,20 @@ ldapsearch -Y GSSAPI \
   cn x-ald-uri-path x-ald-uri-mac x-ald-uri-match-type
 ```
 
-### Поиск групп хостов
+### Поиск HTTP-служб
 
 ```bash
-# Все группы хостов
+# Все HTTP-службы в домене
 ldapsearch -Y GSSAPI \
-  -b "cn=hostgroups,cn=accounts,${BASE_DN}" \
-  "(objectClass=ipahostgroup)" \
-  cn description member
+  -b "cn=services,cn=accounts,${BASE_DN}" \
+  "(krbprincipalname=HTTP/*)" \
+  krbprincipalname
 
-# Конкретная группа хостов
+# Конкретная HTTP-служба
 ldapsearch -Y GSSAPI \
-  -b "cn=hostgroups,cn=accounts,${BASE_DN}" \
-  "(cn=test-web-servers)" \
-  cn member
+  -b "cn=services,cn=accounts,${BASE_DN}" \
+  "(krbprincipalname=HTTP/${TEST_HOST_MID}@${REALM})" \
+  krbprincipalname
 ```
 
 ### Поиск с использованием простой аутентификации
@@ -677,12 +672,6 @@ ldapdelete -Y GSSAPI "cn=rule-api-secret,cn=uri-mac-rules,cn=accounts,${BASE_DN}
 ldapdelete -Y GSSAPI "cn=rule-api-admin,cn=uri-mac-rules,cn=accounts,${BASE_DN}"
 ldapdelete -Y GSSAPI "cn=rule-api-users-regex,cn=uri-mac-rules,cn=accounts,${BASE_DN}"
 ldapdelete -Y GSSAPI "cn=rule-api-reports,cn=uri-mac-rules,cn=accounts,${BASE_DN}"
-```
-
-### Удаление тестовой группы хостов
-
-```bash
-ipa hostgroup-del test-web-servers
 ```
 
 ### Синхронизация после очистки
