@@ -35,10 +35,11 @@ func run(ctx context.Context) error {
 	log := logging.NewConsoleLogger(cfg.Log.GetLogLevel(), cfg.Log.JSONFormat)
 
 	log.Info(ctx, "Starting mac-authserver", map[string]interface{}{
-		"config_path": *configPath,
-		"grpc_port":   cfg.Server.GRPCPort,
-		"http_port":   cfg.Server.HTTPPort,
-		"log_level":   cfg.Log.Level,
+		"config_path":         *configPath,
+		"grpc_port":           cfg.Server.HTTPAuthGRPCPort,
+		"transport_grpc_port": cfg.Server.TransportAuthGRPCPort,
+		"http_port":           cfg.Server.HTTPPort,
+		"log_level":           cfg.Log.Level,
 	})
 
 	ldapClient, err := ldap.NewClient(
@@ -72,12 +73,20 @@ func run(ctx context.Context) error {
 	}
 
 	httpAuthService := grpc.NewAuthServiceV3(httpAuthHandler, log)
-	transportAuthService := grpc.NewExtProcServiceV3(transportAuthHandler, log)
+	transportAuthService := grpc.NewAuthServiceV3(transportAuthHandler, log)
+	extProcService := grpc.NewExtProcServiceV3(transportAuthHandler, log)
 
-	grpcServer := server.NewGRPCServer(cfg.Server.Host, cfg.Server.GRPCPort, httpAuthService, transportAuthService, log)
-
+	// HTTP ext_authz gRPC server (port grpc_port, e.g. 9001)
+	grpcServer := server.NewGRPCServer(cfg.Server.Host, cfg.Server.HTTPAuthGRPCPort, httpAuthService, extProcService, log)
 	if err := grpcServer.Start(ctx); err != nil {
 		log.Error(ctx, "Failed to start gRPC server", map[string]interface{}{"error": err.Error()})
+		return err
+	}
+
+	// Transport ext_authz gRPC server (port transport_grpc_port, e.g. 9002)
+	transportGRPCServer := server.NewAuthOnlyGRPCServer(cfg.Server.Host, cfg.Server.TransportAuthGRPCPort, transportAuthService, log)
+	if err := transportGRPCServer.Start(ctx); err != nil {
+		log.Error(ctx, "Failed to start transport gRPC server", map[string]interface{}{"error": err.Error()})
 		return err
 	}
 
@@ -108,6 +117,10 @@ func run(ctx context.Context) error {
 
 	if err := grpcServer.Stop(ctx); err != nil {
 		log.Error(ctx, "Error stopping gRPC server", map[string]interface{}{"error": err.Error()})
+	}
+
+	if err := transportGRPCServer.Stop(ctx); err != nil {
+		log.Error(ctx, "Error stopping transport gRPC server", map[string]interface{}{"error": err.Error()})
 	}
 
 	log.Info(ctx, "Service stopped successfully", nil)

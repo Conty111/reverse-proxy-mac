@@ -12,12 +12,13 @@ import (
 
 // Default configuration values.
 const (
-	DefaultGRPCPort  = 9001
-	DefaultHTTPPort  = 8080
-	DefaultHost      = "0.0.0.0"
-	DefaultLogLevel  = "info"
-	DefaultLDAPPort  = 389
-	DefaultLDAPSPort = 636
+	DefaultGRPCPort          = 9001
+	DefaultTransportGRPCPort = 9002
+	DefaultHTTPPort          = 8080
+	DefaultHost              = "0.0.0.0"
+	DefaultLogLevel          = "info"
+	DefaultLDAPPort          = 389
+	DefaultLDAPSPort         = 636
 )
 
 type Config struct {
@@ -27,9 +28,10 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	GRPCPort int    `json:"grpc_port"`
-	HTTPPort int    `json:"http_port"`
-	Host     string `json:"host"`
+	HTTPAuthGRPCPort      int    `json:"http_auth_grpc_port"`
+	TransportAuthGRPCPort int    `json:"transport_auth_grpc_port"`
+	HTTPPort              int    `json:"http_port"`
+	Host                  string `json:"host"`
 }
 
 type LogConfig struct {
@@ -75,8 +77,11 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) setDefaults() {
-	if c.Server.GRPCPort == 0 {
-		c.Server.GRPCPort = DefaultGRPCPort
+	if c.Server.HTTPAuthGRPCPort == 0 {
+		c.Server.HTTPAuthGRPCPort = DefaultGRPCPort
+	}
+	if c.Server.TransportAuthGRPCPort == 0 {
+		c.Server.TransportAuthGRPCPort = DefaultTransportGRPCPort
 	}
 	if c.Server.HTTPPort == 0 {
 		c.Server.HTTPPort = DefaultHTTPPort
@@ -116,8 +121,12 @@ func (c *Config) Validate() error {
 		errs = append(errs, "ldap.kerberos.realm is required")
 	}
 
-	if c.Server.GRPCPort < 1 || c.Server.GRPCPort > 65535 {
+	if c.Server.HTTPAuthGRPCPort < 1 || c.Server.HTTPAuthGRPCPort > 65535 {
 		errs = append(errs, "server.grpc_port must be between 1 and 65535")
+	}
+
+	if c.Server.TransportAuthGRPCPort < 1 || c.Server.TransportAuthGRPCPort > 65535 {
+		errs = append(errs, "server.transport_grpc_port must be between 1 and 65535")
 	}
 
 	if c.Server.HTTPPort < 1 || c.Server.HTTPPort > 65535 {

@@ -10,6 +10,7 @@ services:
     hostname: mac-authserver
     ports:
       - "9001:9001"
+      - "9002:9002"
       - "8000:8080"
     volumes:
       - ./config.json:/app/config.json:ro

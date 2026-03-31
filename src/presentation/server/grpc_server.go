@@ -33,7 +33,8 @@ type GRPCServer struct {
 	running      bool
 }
 
-// NewGRPCServer creates a new gRPC server instance with the specified configuration
+// NewGRPCServer creates a new gRPC server instance with the specified configuration.
+// Registers both the Authorization service and the ExternalProcessor service.
 func NewGRPCServer(
 	host string,
 	port int,
@@ -47,6 +48,22 @@ func NewGRPCServer(
 		authSvc:    authSvc,
 		extProcSvc: extProcSvc,
 		logger:     log,
+	}
+}
+
+// NewAuthOnlyGRPCServer creates a gRPC server that registers only the Authorization service.
+// Used for transport-level ext_authz on a dedicated port.
+func NewAuthOnlyGRPCServer(
+	host string,
+	port int,
+	authSvc envoy_auth.AuthorizationServer,
+	log logger.Logger,
+) *GRPCServer {
+	return &GRPCServer{
+		host:    host,
+		port:    port,
+		authSvc: authSvc,
+		logger:  log,
 	}
 }
 
@@ -73,9 +90,13 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 	}
 	s.server = grpc.NewServer(opts...)
 
-	// Register services
+	// Always register the Authorization service
 	envoy_auth.RegisterAuthorizationServer(s.server, s.authSvc)
-	ext_proc.RegisterExternalProcessorServer(s.server, s.extProcSvc)
+
+	// Register ExternalProcessor service only when provided
+	if s.extProcSvc != nil {
+		ext_proc.RegisterExternalProcessorServer(s.server, s.extProcSvc)
+	}
 
 	// Register health service
 	s.healthServer = health.NewServer()
