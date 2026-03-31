@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -140,11 +141,79 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		}, nil
 	}
 
-	a.logger.Info(ctx, "MAC authorization granted", map[string]interface{}{
+	a.logger.Info(ctx, "Host-level MAC authorization granted", map[string]interface{}{
 		"principal": principal,
 		"fqdn":      hostFQDN,
 		"reason":    reason,
 	})
+
+	// Perform URI-level MAC authorization check against all matching rules.
+	// If no URI rule is found for the requested path, access is allowed (URI rules are optional).
+	uriSecCtxs, err := GetMatchingURISecurityContexts(ctx, a.ldapClient, hostFQDN, req.HTTPPath)
+	if err != nil {
+		a.logger.Error(ctx, "Failed to GetMatchingURISecurityContexts", map[string]interface{}{
+			"fqdn":  hostFQDN,
+			"path":  req.HTTPPath,
+			"error": err.Error(),
+		})
+		return &auth.AuthResponse{
+			Decision:      auth.DecisionDeny,
+			Reason:        fmt.Sprintf("Failed to retrieve URI security context: %s", err.Error()),
+			DeniedStatus:  403,
+			DeniedMessage: "Forbidden - MAC context unavailable",
+		}, nil
+	}
+
+	if len(uriSecCtxs) > 0 {
+		a.logger.Debug(ctx, "URI MAC rules matched for path", map[string]interface{}{
+			"fqdn":        hostFQDN,
+			"path":        req.HTTPPath,
+			"rules_count": len(uriSecCtxs),
+		})
+
+		for _, uriSecCtx := range uriSecCtxs {
+			a.logger.Debug(ctx, "Checking URI MAC rule", map[string]interface{}{
+				"fqdn":           hostFQDN,
+				"req_path":       req.HTTPPath,
+				"rule_path":      uriSecCtx.Path,
+				"conf_min":       uriSecCtx.ConfidentialityMin,
+				"cats_min":       fmt.Sprintf("0x%x", uriSecCtx.CategoriesMin),
+				"conf_max":       uriSecCtx.ConfidentialityMax,
+				"cats_max":       fmt.Sprintf("0x%x", uriSecCtx.CategoriesMax),
+				"integrity_cats": fmt.Sprintf("0x%x", uriSecCtx.IntegrityCategories),
+			})
+
+			allowed, reason = checkAccessHTTP(userSecCtx, uriSecCtx)
+			if !allowed {
+				a.logger.Warn(ctx, "URI-level MAC authorization denied", map[string]interface{}{
+					"principal": principal,
+					"fqdn":      hostFQDN,
+					"path":      req.HTTPPath,
+					"rule_path": uriSecCtx.Path,
+					"reason":    reason,
+				})
+				return &auth.AuthResponse{
+					Decision:      auth.DecisionDeny,
+					Reason:        reason,
+					DeniedStatus:  403,
+					DeniedMessage: "Forbidden - MAC policy violation",
+				}, nil
+			}
+		}
+
+		a.logger.Info(ctx, "URI-level MAC authorization granted", map[string]interface{}{
+			"principal":   principal,
+			"fqdn":        hostFQDN,
+			"path":        req.HTTPPath,
+			"rules_count": len(uriSecCtxs),
+			"reason":      reason,
+		})
+	} else {
+		a.logger.Debug(ctx, "No URI MAC rules found for path, skipping URI-level check", map[string]interface{}{
+			"fqdn": hostFQDN,
+			"path": req.HTTPPath,
+		})
+	}
 
 	return &auth.AuthResponse{
 		Decision: auth.DecisionAllow,
@@ -163,20 +232,6 @@ func (a *HTTPAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {
 			"WWW-Authenticate": "Negotiate",
 		},
 	}
-}
-
-var writeHTTPMethods = map[string]struct{}{
-	"POST":   {},
-	"PUT":    {},
-	"DELETE": {},
-	"PATCH":  {},
-}
-
-// checkAccessHTTP performs Mandatory Access Control (MAC) authorization check.
-// Based on Bell-LaPadula model: "no read up, no write down".
-func checkAccessHTTP(userCtx *auth.UserHTTPSecurityContext, hostCtx *auth.HostSecurityContext) (bool, string) {
-	_, isWriteOperation := writeHTTPMethods[userCtx.RequestMethod]
-	return checkMACAccess(userCtx, hostCtx, isWriteOperation)
 }
 
 func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, httpMethod string) (*auth.UserHTTPSecurityContext, error) {
@@ -230,6 +285,131 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 		CategoriesMax:       label.CatsMax,
 		IntegrityCategories: uint32(integrityCategories),
 	}, nil
+}
+
+
+// GetMatchingURISecurityContexts searches LDAP for all aldURIMACRule entries bound to
+// the given host service principal whose path matches requestPath (exact, prefix, or
+// regex). All matching rules are returned as URISecurityContext.
+//
+// NOTE: The x-ald-uri-service-ref attribute stores full Kerberos principal DNs
+// (e.g. "krbprincipalname=HTTP/host.domain@REALM,cn=services,..."). OpenLDAP may
+// define this attribute with only an EQUALITY matching rule, which means substring
+// filters (*hostname*) silently return no results. To work around this, we fetch all
+// aldURIMACRule entries and perform the service-ref filtering in Go.
+func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQDN, requestPath string) ([]*auth.URISecurityContext, error) {
+
+	entries, err := cl.Search(ctx, "(objectClass=aldURIMACRule)", auth.AllURIMACAttributes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search URI MAC rules in LDAP: %w", err)
+	}
+
+	var matched []*auth.URISecurityContext
+
+	for _, entry := range entries {
+		// Filter by service ref: the attribute value is a full DN that contains the
+		// host FQDN as part of the Kerberos principal name. We check all values of
+		// the multi-valued attribute for a case-insensitive substring match.
+		serviceRefs := entry.GetAttributeValues(auth.URIServiceRefAttribute)
+		refMatched := false
+		for _, ref := range serviceRefs {
+			if strings.Contains(strings.ToLower(ref), strings.ToLower(hostFQDN)) {
+				refMatched = true
+				break
+			}
+		}
+		if !refMatched {
+			continue
+		}
+
+		uriPath := entry.GetAttributeValue(auth.URIPathAttribute)
+		if uriPath == "" {
+			continue
+		}
+
+		macValue := entry.GetAttributeValue(auth.URIMacAttribute)
+		if macValue == "" {
+			continue
+		}
+
+		matchType := auth.URIMatchType(entry.GetAttributeValue(auth.URIMatchTypeAttribute))
+		if matchType == "" {
+			matchType = auth.URIMatchExact
+		}
+
+		switch matchType {
+		case auth.URIMatchExact:
+			if requestPath != uriPath {
+				continue
+			}
+		case auth.URIMatchPrefix:
+			if !strings.HasPrefix(requestPath, uriPath) {
+				continue
+			}
+		case auth.URIMatchRegex:
+			ok, err := regexp.MatchString(uriPath, requestPath)
+			if err != nil {
+				cl.Logger.Warn(ctx, "invalid URI regex pattern, skipping rule", map[string]interface{}{
+					"cn":      entry.GetAttributeValue("cn"),
+					"pattern": uriPath,
+					"error":   err.Error(),
+				})
+				continue
+			}
+			if !ok {
+				continue
+			}
+		}
+
+		label, err := parseMacLabel(macValue)
+		if err != nil {
+			cl.Logger.Warn(ctx, "failed to parse URI MAC label, skipping rule", map[string]interface{}{
+				"cn":    entry.GetAttributeValue("cn"),
+				"error": err.Error(),
+			})
+			continue
+		}
+
+		var integrityCategories uint32
+		micValue := entry.GetAttributeValue(auth.URIIntegrityCategoriesAttribute)
+		if micValue != "" {
+			parsed, err := strconv.ParseUint(micValue, 0, 32)
+			if err != nil {
+				cl.Logger.Warn(ctx, "failed to parse URI integrity categories, skipping rule", map[string]interface{}{
+					"cn":    entry.GetAttributeValue("cn"),
+					"error": err.Error(),
+				})
+				continue
+			}
+			integrityCategories = uint32(parsed)
+		}
+
+		uriCtx := &auth.URISecurityContext{
+			Path:                uriPath,
+			ConfidentialityMin:  label.ConfMin,
+			CategoriesMin:       label.CatsMin,
+			ConfidentialityMax:  label.ConfMax,
+			CategoriesMax:       label.CatsMax,
+			IntegrityCategories: integrityCategories,
+		}
+
+		matched = append(matched, uriCtx)
+	}
+	return matched, nil
+}
+
+var writeHTTPMethods = map[string]struct{}{
+	"POST":   {},
+	"PUT":    {},
+	"DELETE": {},
+	"PATCH":  {},
+}
+
+// checkAccessHTTP performs Mandatory Access Control (MAC) authorization check.
+// Based on Bell-LaPadula model: "no read up, no write down".
+func checkAccessHTTP(userCtx *auth.UserHTTPSecurityContext, resourceCtx auth.SecurityContext) (bool, string) {
+	_, isWriteOperation := writeHTTPMethods[userCtx.RequestMethod]
+	return checkMACAccess(userCtx, resourceCtx, isWriteOperation)
 }
 
 // extractHostFromRequest extracts the FQDN from the authorization request.

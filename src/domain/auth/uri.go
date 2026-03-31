@@ -37,11 +37,12 @@ type URIMACRule struct {
 }
 
 const (
-	URIMacAttribute         = "x-ald-uri-mac"
-	URIPathAttribute        = "x-ald-uri-path"
-	URIMatchTypeAttribute   = "x-ald-uri-match-type"
-	URIDescriptionAttribute = "x-ald-uri-description"
-	URIServiceRefAttribute  = "x-ald-uri-service-ref"
+	URIMacAttribute                 = "x-ald-uri-mac"
+	URIPathAttribute                = "x-ald-uri-path"
+	URIMatchTypeAttribute           = "x-ald-uri-match-type"
+	URIDescriptionAttribute         = "x-ald-uri-description"
+	URIServiceRefAttribute          = "x-ald-uri-service-ref"
+	URIIntegrityCategoriesAttribute = "x-ald-uri-mic-level"
 )
 
 // AllMacURIAttributes contains all MAC-related attributes for URI resources (aldURIContext).
@@ -54,13 +55,14 @@ var AllURIAttributes []string = []string{
 	URIDescriptionAttribute,
 }
 
-// AllURIMACRuleAttributes contains all attributes for URI MAC rule entries (aldURIMACRule).
+// AllURIMACAttributes contains all attributes for URI MAC rule entries (aldURIMACRule).
 var AllURIMACAttributes []string = []string{
 	"cn",
 	URIMacAttribute,
 	URIPathAttribute,
 	URIMatchTypeAttribute,
 	URIServiceRefAttribute,
+	URIIntegrityCategoriesAttribute,
 }
 
 func (usc *URISecurityContext) GetConfidentialityMin() uint8 { return usc.ConfidentialityMin }
