@@ -11,12 +11,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/reflection"
 
 	"reverse-proxy-mac/src/domain/logger"
 )
 
 const (
+	// defaultMaxConcurrentStreams sets the maximum number of concurrent streams per connection
 	defaultMaxConcurrentStreams = 1000
 )
 
@@ -33,6 +33,7 @@ type GRPCServer struct {
 	running      bool
 }
 
+// NewGRPCServer creates a new gRPC server instance with the specified configuration
 func NewGRPCServer(
 	host string,
 	port int,
@@ -53,36 +54,40 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Check if server is already running
 	if s.running {
 		return fmt.Errorf("server is already running")
 	}
 
+	// Create listener
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
-
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
 	s.listener = listener
 
+	// Create gRPC server with options
 	opts := []grpc.ServerOption{
 		grpc.MaxConcurrentStreams(defaultMaxConcurrentStreams),
 	}
 	s.server = grpc.NewServer(opts...)
 
+	// Register services
 	envoy_auth.RegisterAuthorizationServer(s.server, s.authSvc)
 	ext_proc.RegisterExternalProcessorServer(s.server, s.extProcSvc)
 
+	// Register health service
 	s.healthServer = health.NewServer()
 	grpc_health_v1.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
-	reflection.Register(s.server)
 
 	s.logger.Info(ctx, "gRPC server starting", map[string]interface{}{"address": addr})
 
 	s.running = true
 
+	// Start server in background goroutine
 	go func() {
 		if err := s.server.Serve(listener); err != nil {
 			s.logger.Error(context.Background(), "gRPC server error", map[string]interface{}{"error": err.Error()})
@@ -94,20 +99,24 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 	return nil
 }
 
+// Stop gracefully shuts down the gRPC server
 func (s *GRPCServer) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// If server is not running, nothing to do
 	if !s.running {
 		return nil
 	}
 
 	s.logger.Info(ctx, "Stopping gRPC server", nil)
 
+	// Update health status to not serving
 	if s.healthServer != nil {
 		s.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 	}
 
+	// Gracefully stop the server
 	if s.server != nil {
 		s.server.GracefulStop()
 		s.server = nil

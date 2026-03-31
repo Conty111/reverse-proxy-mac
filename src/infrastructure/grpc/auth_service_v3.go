@@ -27,13 +27,17 @@ func NewAuthServiceV3(authorizer auth.Authorizer, log logger.Logger) *AuthServic
 }
 
 func (s *AuthServiceV3) Check(ctx context.Context, req *envoy_auth.CheckRequest) (*envoy_auth.CheckResponse, error) {
+	// Convert Envoy request to our internal format
 	authReq := s.convertToAuthRequest(req)
+	
+	// Perform authorization
 	authResp, err := s.authorizer.Authorize(ctx, authReq)
 	if err != nil {
 		s.logger.Error(ctx, "Authorization failed", map[string]interface{}{"error": err.Error()})
 		return s.createDeniedResponse(codes.Internal, "Internal authorization error"), nil
 	}
 
+	// Convert response back to Envoy format
 	return s.convertToEnvoyResponse(authResp), nil
 }
 
@@ -51,11 +55,13 @@ func (s *AuthServiceV3) convertToAuthRequest(req *envoy_auth.CheckRequest) *auth
 		HTTPHeaders: make(map[string]string),
 	}
 
+	// Extract source information
 	if source != nil {
 		authReq.SourceIP = source.GetAddress().GetSocketAddress().GetAddress()
 		authReq.SourcePort = int32(source.GetAddress().GetSocketAddress().GetPortValue())
 	}
 
+	// Extract destination information
 	if dest != nil {
 		authReq.DestIP = dest.GetAddress().GetSocketAddress().GetAddress()
 		authReq.DestPort = int32(dest.GetAddress().GetSocketAddress().GetPortValue())
@@ -76,6 +82,7 @@ func (s *AuthServiceV3) convertToAuthRequest(req *envoy_auth.CheckRequest) *auth
 }
 
 func (s *AuthServiceV3) convertToEnvoyResponse(authResp *auth.AuthResponse) *envoy_auth.CheckResponse {
+	// Handle allowed responses
 	if authResp.Decision == auth.DecisionAllow {
 		var headers []*envoy_core.HeaderValueOption
 		for k, v := range authResp.Headers {
@@ -99,15 +106,15 @@ func (s *AuthServiceV3) convertToEnvoyResponse(authResp *auth.AuthResponse) *env
 		}
 	}
 
-	if authResp.DeniedStatus == 302 {
+	// Handle different types of denied responses
+	switch authResp.DeniedStatus {
+	case 302:
 		return s.createRedirectResponse(authResp.Headers["Location"], authResp.DeniedMessage)
-	}
-
-	if authResp.DeniedStatus == 401 {
+	case 401:
 		return s.createUnauthorizedResponse(authResp.DeniedMessage, authResp.Headers)
+	default:
+		return s.createDeniedResponse(codes.PermissionDenied, authResp.DeniedMessage)
 	}
-
-	return s.createDeniedResponse(codes.PermissionDenied, authResp.DeniedMessage)
 }
 
 func (s *AuthServiceV3) createDeniedResponse(code codes.Code, message string) *envoy_auth.CheckResponse {

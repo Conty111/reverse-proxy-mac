@@ -40,6 +40,7 @@ func parseMacLabel(mac string) (*macLabel, error) {
 	var label macLabel
 	var confMinTmp, confMaxTmp uint64
 
+	// Parse confidentiality min
 	if _, err := fmt.Sscanf(parts[0], "%d", &confMinTmp); err != nil {
 		return nil, fmt.Errorf("invalid confidentiality-min '%s': %w", parts[0], err)
 	}
@@ -48,10 +49,12 @@ func parseMacLabel(mac string) (*macLabel, error) {
 	}
 	label.ConfMin = uint8(confMinTmp)
 
+	// Parse categories min
 	if _, err := fmt.Sscanf(parts[1], "%x", &label.CatsMin); err != nil {
 		return nil, fmt.Errorf("invalid categories-min '%s': %w", parts[1], err)
 	}
 
+	// Parse confidentiality max
 	if _, err := fmt.Sscanf(parts[2], "%d", &confMaxTmp); err != nil {
 		return nil, fmt.Errorf("invalid confidentiality-max '%s': %w", parts[2], err)
 	}
@@ -60,6 +63,7 @@ func parseMacLabel(mac string) (*macLabel, error) {
 	}
 	label.ConfMax = uint8(confMaxTmp)
 
+	// Parse categories max
 	if _, err := fmt.Sscanf(parts[3], "%x", &label.CatsMax); err != nil {
 		return nil, fmt.Errorf("invalid categories-max '%s': %w", parts[3], err)
 	}
@@ -68,6 +72,7 @@ func parseMacLabel(mac string) (*macLabel, error) {
 }
 
 func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (*auth.HostSecurityContext, error) {
+	// Search for host in LDAP
 	hostEntries, err := cl.Search(ctx, fmt.Sprintf("(fqdn=%s)", fqdn), auth.AllMacHostAttributes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search host in LDAP: %w", err)
@@ -82,6 +87,7 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 	}
 	hostEntry := hostEntries[0]
 
+	// Parse MAC label
 	macValue := hostEntry.GetAttributeValue(auth.HostMacAttribute)
 	if macValue == "" {
 		return nil, fmt.Errorf("host MAC attribute '%s' is empty or not found", auth.HostMacAttribute)
@@ -92,7 +98,8 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 		return nil, fmt.Errorf("failed to parse MAC label for host: %w", err)
 	}
 
-	var integrityCategories uint32 = 0
+	// Parse integrity categories
+	var integrityCategories uint32
 	categoryAttribute := hostEntry.GetAttributeValue(auth.HostIntegrityCategoriesAttribute)
 	if categoryAttribute != "" {
 		category, err := strconv.ParseUint(categoryAttribute, 0, 32)
@@ -112,6 +119,7 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (
 }
 
 func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool) (bool, string) {
+	// Get security context values
 	objectConfMin := object.GetConfidentialityMin()
 	objectConfMax := object.GetConfidentialityMax()
 	objectCatsMin := object.GetCategoriesMin()
@@ -121,6 +129,7 @@ func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool)
 	subjectCatsMin := subject.GetCategoriesMin()
 	subjectCatsMax := subject.GetCategoriesMax()
 
+	// Check confidentiality and categories based on operation type
 	if isWriteOperation {
 		// Write operations: exact match required for confidentiality and categories
 		if subjectConfMin != objectConfMin || subjectConfMax != objectConfMax {

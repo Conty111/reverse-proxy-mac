@@ -58,22 +58,20 @@ func (s *HTTPServer) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Check if server is already running
 	if s.running {
 		return fmt.Errorf("HTTP server is already running")
 	}
 
+	// Create mux and register endpoints
 	mux := http.NewServeMux()
-
-	// Health check endpoints
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/health/live", s.handleLiveness)
 	mux.HandleFunc("/health/ready", s.handleReadiness)
-
-	// Prometheus metrics endpoint
 	mux.Handle("/metrics", promhttp.Handler())
 
+	// Create server with configuration
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
-
 	s.server = &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -84,6 +82,7 @@ func (s *HTTPServer) Start(ctx context.Context) error {
 
 	s.running = true
 
+	// Start server in background goroutine
 	go func() {
 		s.logger.Info(ctx, "HTTP server starting", map[string]interface{}{"address": addr})
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -101,15 +100,18 @@ func (s *HTTPServer) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// If server is not running, nothing to do
 	if !s.running {
 		return nil
 	}
 
 	s.logger.Info(ctx, "Stopping HTTP server", nil)
 
+	// Create shutdown context with timeout
 	shutdownCtx, cancel := context.WithTimeout(ctx, defaultShutdownTimeout)
 	defer cancel()
 
+	// Shutdown the server
 	if err := s.server.Shutdown(shutdownCtx); err != nil {
 		s.logger.Error(ctx, "HTTP server shutdown error", map[string]interface{}{"error": err.Error()})
 		return err
@@ -131,6 +133,7 @@ type HealthResponse struct {
 func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Get a copy of health checkers
 	s.mu.RLock()
 	checkers := make(map[string]HealthChecker, len(s.healthCheckers))
 	for k, v := range s.healthCheckers {
@@ -138,11 +141,13 @@ func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.RUnlock()
 
+	// Create response structure
 	response := HealthResponse{
 		Status:     "healthy",
 		Components: make(map[string]string),
 	}
 
+	// Check all components
 	allHealthy := true
 	for name, checker := range checkers {
 		if checker.IsHealthy(ctx) {
@@ -153,6 +158,7 @@ func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Set status code based on health
 	if !allHealthy {
 		response.Status = "unhealthy"
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -160,6 +166,7 @@ func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 
+	// Write response
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		s.logger.Error(ctx, "Failed to encode health response", map[string]interface{}{"error": err.Error()})
@@ -169,10 +176,12 @@ func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 // handleLiveness handles the /health/live endpoint - basic liveness probe.
 // Returns 200 OK if the service is running.
 func (s *HTTPServer) handleLiveness(w http.ResponseWriter, r *http.Request) {
+	// Create liveness response
 	response := HealthResponse{
 		Status: "alive",
 	}
 
+	// Write response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -185,6 +194,7 @@ func (s *HTTPServer) handleLiveness(w http.ResponseWriter, r *http.Request) {
 func (s *HTTPServer) handleReadiness(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Get a copy of health checkers
 	s.mu.RLock()
 	checkers := make(map[string]HealthChecker, len(s.healthCheckers))
 	for k, v := range s.healthCheckers {
@@ -192,11 +202,13 @@ func (s *HTTPServer) handleReadiness(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.RUnlock()
 
+	// Create response structure
 	response := HealthResponse{
 		Status:     "ready",
 		Components: make(map[string]string),
 	}
 
+	// Check all components for readiness
 	allReady := true
 	for name, checker := range checkers {
 		if checker.IsHealthy(ctx) {
@@ -207,6 +219,7 @@ func (s *HTTPServer) handleReadiness(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Set status code based on readiness
 	if !allReady {
 		response.Status = "not_ready"
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -214,6 +227,7 @@ func (s *HTTPServer) handleReadiness(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 
+	// Write response
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		s.logger.Error(ctx, "Failed to encode readiness response", map[string]interface{}{"error": err.Error()})

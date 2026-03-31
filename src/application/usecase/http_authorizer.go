@@ -28,15 +28,13 @@ func NewHTTPAuthorizer(log logger.Logger, ldapClient *ldap.Client) (*HTTPAuthori
 }
 
 func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (*auth.AuthResponse, error) {
+	// Validate authorization header
 	authHeader, exists := req.HTTPHeaders["authorization"]
-	if !exists {
+	if !exists || !strings.HasPrefix(authHeader, "Negotiate ") {
 		return a.createUnauthorizedResponse(), nil
 	}
 
-	if !strings.HasPrefix(authHeader, "Negotiate ") {
-		return a.createUnauthorizedResponse(), nil
-	}
-
+	// Decode Kerberos token
 	tokenStr := strings.TrimPrefix(authHeader, "Negotiate ")
 	tokenBytes, err := base64.StdEncoding.DecodeString(tokenStr)
 	if err != nil {
@@ -44,6 +42,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		return a.createUnauthorizedResponse(), nil
 	}
 
+	// Verify Kerberos ticket
 	ticket, err := a.ldapClient.VerifyKerberosTicket(ctx, tokenBytes)
 	if err != nil {
 		a.logger.Error(ctx, "Kerberos ticket verification failed", map[string]interface{}{
@@ -62,8 +61,8 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 	})
 
 	responseHeaders := map[string]string{
-		"X-Authenticated-User": ticket.CName().PrincipalNameString(),
-		"X-Auth-Realm":         ticket.Realm(),
+		"X-Authenticated-User": principal,
+		"X-Auth-Realm":         realm,
 	}
 
 	// Get user security context
@@ -89,6 +88,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		"integrity_cats": fmt.Sprintf("0x%x", userSecCtx.IntegrityCategories),
 	})
 
+	// Extract host FQDN from request
 	hostFQDN, err := extractHostFromRequest(req)
 	if err != nil {
 		a.logger.Warn(ctx, "Failed to extract host FQDN from the request", map[string]interface{}{
@@ -102,6 +102,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		}, nil
 	}
 
+	// Get host security context
 	hostSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, hostFQDN)
 	if err != nil {
 		a.logger.Error(ctx, "Failed to GetHostSecurityContext", map[string]interface{}{
@@ -164,6 +165,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		}, nil
 	}
 
+	// Check URI-level MAC authorization if any rules matched
 	if len(uriSecCtxs) > 0 {
 		a.logger.Debug(ctx, "URI MAC rules matched for path", map[string]interface{}{
 			"fqdn":        hostFQDN,
@@ -183,7 +185,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 				"integrity_cats": fmt.Sprintf("0x%x", uriSecCtx.IntegrityCategories),
 			})
 
-			allowed, reason = checkAccessHTTP(userSecCtx, uriSecCtx)
+			allowed, reason := checkAccessHTTP(userSecCtx, uriSecCtx)
 			if !allowed {
 				a.logger.Warn(ctx, "URI-level MAC authorization denied", map[string]interface{}{
 					"principal": principal,
@@ -217,7 +219,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 
 	return &auth.AuthResponse{
 		Decision: auth.DecisionAllow,
-		Reason:   fmt.Sprintf("HTTP authentication and MAC authorization successful for %s", ticket.CName().PrincipalNameString()),
+		Reason:   fmt.Sprintf("HTTP authentication and MAC authorization successful for %s", principal),
 		Headers:  responseHeaders,
 	}, nil
 }
@@ -239,6 +241,7 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 		return nil, err
 	}
 
+	// Search for user in LDAP
 	userEntries, err := cl.Search(ctx, fmt.Sprintf("(uid=%s)", username), auth.AllMacUserAttributes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search user in LDAP: %w", err)
@@ -253,12 +256,14 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 	}
 	userEntry := userEntries[0]
 
+	// Log user attributes for debugging
 	attrs := make(map[string]interface{}, len(userEntry.Attributes))
 	for _, attr := range userEntry.Attributes {
 		attrs[attr.Name] = attr.Values
 	}
 	cl.Logger.Debug(ctx, "user found in LDAP", attrs)
 
+	// Parse MAC label
 	macValue := userEntry.GetAttributeValue(auth.UserMacAttribute)
 	if macValue == "" {
 		return nil, fmt.Errorf("user MAC attribute '%s' is empty or not found", auth.UserMacAttribute)
@@ -268,6 +273,8 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse MAC label for user: %w", err)
 	}
+
+	// Parse integrity categories
 	integrity := userEntry.GetAttributeValue(auth.UserIntegrityLevelAttribute)
 	if integrity == "" {
 		return nil, fmt.Errorf("user integrity categories attribute '%s' is empty or not found", auth.UserIntegrityLevelAttribute)
@@ -298,7 +305,7 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 // filters (*hostname*) silently return no results. To work around this, we fetch all
 // aldURIMACRule entries and perform the service-ref filtering in Go.
 func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQDN, requestPath string) ([]*auth.URISecurityContext, error) {
-
+	// Search for all URI MAC rules in LDAP
 	entries, err := cl.Search(ctx, "(objectClass=aldURIMACRule)", auth.AllURIMACAttributes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search URI MAC rules in LDAP: %w", err)
@@ -322,21 +329,25 @@ func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQ
 			continue
 		}
 
+		// Get URI path
 		uriPath := entry.GetAttributeValue(auth.URIPathAttribute)
 		if uriPath == "" {
 			continue
 		}
 
+		// Get MAC value
 		macValue := entry.GetAttributeValue(auth.URIMacAttribute)
 		if macValue == "" {
 			continue
 		}
 
+		// Determine match type
 		matchType := auth.URIMatchType(entry.GetAttributeValue(auth.URIMatchTypeAttribute))
 		if matchType == "" {
 			matchType = auth.URIMatchExact
 		}
 
+		// Check if path matches based on match type
 		switch matchType {
 		case auth.URIMatchExact:
 			if requestPath != uriPath {
@@ -361,6 +372,7 @@ func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQ
 			}
 		}
 
+		// Parse MAC label
 		label, err := parseMacLabel(macValue)
 		if err != nil {
 			cl.Logger.Warn(ctx, "failed to parse URI MAC label, skipping rule", map[string]interface{}{
@@ -370,6 +382,7 @@ func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQ
 			continue
 		}
 
+		// Parse integrity categories
 		var integrityCategories uint32
 		micValue := entry.GetAttributeValue(auth.URIIntegrityCategoriesAttribute)
 		if micValue != "" {
@@ -384,6 +397,7 @@ func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQ
 			integrityCategories = uint32(parsed)
 		}
 
+		// Create URI security context
 		uriCtx := &auth.URISecurityContext{
 			Path:                uriPath,
 			ConfidentialityMin:  label.ConfMin,

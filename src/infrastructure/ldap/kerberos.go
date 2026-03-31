@@ -15,7 +15,6 @@ import (
 )
 
 func (c *Client) initKerberos(cfg *config.KerberosConfig) error {
-
 	// Load keytab file first. All requests to LDAP will be authorized via Kerberos and this keytab
 	// Also this keytab may be used to decrypt and authorize users Kerberos tickets
 	kt, err := keytab.Load(cfg.Keytab)
@@ -74,7 +73,6 @@ func (c *Client) initKerberos(cfg *config.KerberosConfig) error {
 	})
 
 	c.gssApiClient = gssapiClient
-
 	return nil
 }
 
@@ -83,9 +81,9 @@ func (cl *Client) VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (
 		"token_size": len(tokenBytes),
 	})
 
+	// Unmarshal SPNEGO token
 	var spnegoToken spnego.SPNEGOToken
-	err := spnegoToken.Unmarshal(tokenBytes)
-	if err != nil {
+	if err := spnegoToken.Unmarshal(tokenBytes); err != nil {
 		cl.Logger.Error(ctx, "Failed to unmarshal SPNEGO token", map[string]interface{}{
 			"error":      err.Error(),
 			"token_size": len(tokenBytes),
@@ -93,6 +91,7 @@ func (cl *Client) VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (
 		return nil, fmt.Errorf("failed to unmarshal SPNEGO token: %w", err)
 	}
 
+	// Validate SPNEGO token type
 	if !spnegoToken.Init {
 		cl.Logger.Error(ctx, "Invalid SPNEGO token type", map[string]interface{}{
 			"expected": "NegTokenInit",
@@ -101,15 +100,16 @@ func (cl *Client) VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (
 		return nil, fmt.Errorf("expected NegTokenInit")
 	}
 
+	// Unmarshal KRB5 token
 	var krb5Token spnego.KRB5Token
-	err = krb5Token.Unmarshal(spnegoToken.NegTokenInit.MechTokenBytes)
-	if err != nil {
+	if err := krb5Token.Unmarshal(spnegoToken.NegTokenInit.MechTokenBytes); err != nil {
 		cl.Logger.Error(ctx, "Failed to unmarshal KRB5 token", map[string]interface{}{
 			"error": err.Error(),
 		})
 		return nil, fmt.Errorf("failed to unmarshal KRB5 token: %w", err)
 	}
 
+	// Validate KRB5 token type
 	if !krb5Token.IsAPReq() {
 		cl.Logger.Error(ctx, "Invalid KRB5 token type", map[string]interface{}{
 			"expected": "AP-REQ",
@@ -117,6 +117,7 @@ func (cl *Client) VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (
 		return nil, fmt.Errorf("expected AP-REQ token")
 	}
 
+	// Verify AP-REQ
 	settings := service.NewSettings(
 		cl.keytab,
 		service.DecodePAC(false), // NOTE! Disabled PAC decoding because of error
@@ -132,6 +133,7 @@ func (cl *Client) VerifyKerberosTicket(ctx context.Context, tokenBytes []byte) (
 		return nil, fmt.Errorf("failed to verify AP-REQ: %w", err)
 	}
 
+	// Check validation result
 	if !valid {
 		cl.Logger.Error(ctx, "Kerberos ticket validation failed", map[string]interface{}{
 			"reason": "Ticket marked as invalid by verifier",

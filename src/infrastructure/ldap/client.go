@@ -97,6 +97,7 @@ func (cl *Client) reconnect(ctx context.Context) error {
 	cl.connMu.Lock()
 	defer cl.connMu.Unlock()
 
+	// If we're already connected and not closing, nothing to do
 	if cl.ldapConnection != nil && !cl.ldapConnection.IsClosing() {
 		return nil
 	}

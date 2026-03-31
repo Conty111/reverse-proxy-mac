@@ -11,11 +11,10 @@ import (
 
 func realmToDN(realm string) string {
 	parts := strings.Split(strings.ToLower(realm), ".")
-	dnParts := make([]string, len(parts))
 	for i, part := range parts {
-		dnParts[i] = "dc=" + part
+		parts[i] = "dc=" + part
 	}
-	return strings.Join(dnParts, ",")
+	return strings.Join(parts, ",")
 }
 
 func (cl *Client) Search(ctx context.Context, filter string, attributes []string) ([]*ldap.Entry, error) {
@@ -59,6 +58,10 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 
 		result, err := conn.Search(searchRequest)
 		if err == nil {
+			cl.Logger.Info(ctx, "LDAP search successful", map[string]interface{}{
+				"attempt": attempt,
+				"entries": len(result.Entries),
+			})
 			return result.Entries, nil
 		}
 
@@ -68,15 +71,18 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 			"attempt": attempt,
 		})
 
+		// If connection is not closing, we can't recover so we break
 		if !conn.IsClosing() {
 			break
 		}
 
+		// Try to reconnect
 		if reconnErr := cl.reconnect(ctx); reconnErr != nil {
 			cl.Logger.Error(ctx, "LDAP reconnect failed", map[string]interface{}{
 				"error": reconnErr.Error(),
 			})
 			lastErr = reconnErr
+			break // If reconnect failed, we can't do anything more
 		}
 	}
 

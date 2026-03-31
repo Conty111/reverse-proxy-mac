@@ -57,6 +57,7 @@ func (s *ExtProcServiceV3) processRequest(ctx context.Context, req *ext_proc.Pro
 	case *ext_proc.ProcessingRequest_ResponseBody:
 		return s.processResponseBody()
 	default:
+		// For unknown request types, continue processing
 		return &ext_proc.ProcessingResponse{
 			Response: &ext_proc.ProcessingResponse_ImmediateResponse{
 				ImmediateResponse: &ext_proc.ImmediateResponse{
@@ -70,17 +71,20 @@ func (s *ExtProcServiceV3) processRequest(ctx context.Context, req *ext_proc.Pro
 }
 
 func (s *ExtProcServiceV3) processRequestHeaders(ctx context.Context, headers *ext_proc.HttpHeaders) *ext_proc.ProcessingResponse {
+	// Create authorization request for transport layer
 	authReq := &auth.AuthRequest{
 		RequestID: "ext-proc-request",
 		Timestamp: time.Now(),
 		Protocol:  "TCP",
 	}
 
+	// Perform authorization
 	authResp, err := s.authorizer.Authorize(ctx, authReq)
 	if err != nil {
 		s.logger.Error(ctx, "L3-L4 authorization failed", map[string]interface{}{"error": err.Error()})
 	}
 
+	// Handle denied responses
 	if authResp != nil && authResp.Decision == auth.DecisionDeny {
 		return &ext_proc.ProcessingResponse{
 			Response: &ext_proc.ProcessingResponse_ImmediateResponse{
@@ -94,6 +98,7 @@ func (s *ExtProcServiceV3) processRequestHeaders(ctx context.Context, headers *e
 		}
 	}
 
+	// Allow request to continue
 	return &ext_proc.ProcessingResponse{
 		Response: &ext_proc.ProcessingResponse_RequestHeaders{
 			RequestHeaders: &ext_proc.HeadersResponse{},
