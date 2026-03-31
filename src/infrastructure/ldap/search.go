@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-ldap/ldap/v3"
 )
@@ -28,47 +29,56 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 		"basedn":     baseDN,
 		"attributes": attributes,
 	})
+
 	searchRequest := ldap.NewSearchRequest(
 		baseDN,
 		ldap.ScopeWholeSubtree,
 		ldap.NeverDerefAliases,
-		0,
-		0,
-		false,
-		filter,
-		attributes,
-		nil,
+		0, 0, false,
+		filter, attributes, nil,
 	)
 
-	cl.connMu.RLock()
-	conn := cl.ldapConnection
-	cl.connMu.RUnlock()
-
-	result, err := conn.Search(searchRequest)
-
-	if err != nil {
-		cl.Logger.Error(ctx, "LDAP search request failed", map[string]interface{}{
-			"error": err.Error(),
-		})
-
-		if ldap.IsErrorWithCode(err, ldap.ErrorNetwork) {
-			// if reconnErr := cl.reconnect(ctx); reconnErr != nil {
-			// 	return nil, fmt.Errorf("LDAP search failed: %w (reconnect: %v)", err, reconnErr)
-			// }
-
-			cl.Logger.Error(ctx, fmt.Sprintf("Needs reconnect with LDAP: %s", err.Error()), map[string]interface{}{})
-			// if err != nil {
-			// 	cl.Logger.Error(ctx, "LDAP search request failed after reconnect", map[string]interface{}{
-			// 		"error": err.Error(),
-			// 	})
-			// 	return nil, fmt.Errorf("LDAP search failed after reconnect: %w", err)
-			// }
-
-			// return result.Entries, nil
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := retryDelay(attempt - 1)
+			cl.Logger.Info(ctx, "Retrying LDAP search", map[string]interface{}{
+				"attempt": attempt,
+				"delay":   delay.String(),
+			})
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
 		}
 
-		return nil, fmt.Errorf("LDAP search failed: %w", err)
+		cl.connMu.RLock()
+		conn := cl.ldapConnection
+		cl.connMu.RUnlock()
+
+		result, err := conn.Search(searchRequest)
+		if err == nil {
+			return result.Entries, nil
+		}
+
+		lastErr = err
+		cl.Logger.Error(ctx, "LDAP search failed", map[string]interface{}{
+			"error":   err.Error(),
+			"attempt": attempt,
+		})
+
+		if !conn.IsClosing() {
+			break
+		}
+
+		if reconnErr := cl.reconnect(ctx); reconnErr != nil {
+			cl.Logger.Error(ctx, "LDAP reconnect failed", map[string]interface{}{
+				"error": reconnErr.Error(),
+			})
+			lastErr = reconnErr
+		}
 	}
 
-	return result.Entries, nil
+	return nil, fmt.Errorf("LDAP search failed: %w", lastErr)
 }

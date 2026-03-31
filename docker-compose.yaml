@@ -38,9 +38,9 @@ services:
     command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
     networks:
       - proxy-network
-    depends_on:
-      mac-authserver:
-        condition: service_healthy
+    # depends_on:
+    #   mac-authserver:
+    #     condition: service_healthy
     restart: unless-stopped
 
 networks:

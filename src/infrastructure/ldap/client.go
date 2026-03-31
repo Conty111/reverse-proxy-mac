@@ -5,14 +5,22 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"math/rand"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/go-ldap/ldap/v3"
 	"github.com/jcmturner/gokrb5/v8/keytab"
 
 	"reverse-proxy-mac/src/domain/logger"
 	"reverse-proxy-mac/src/infrastructure/config"
+)
+
+const (
+	maxRetries     = 3
+	retryBaseDelay = 200 * time.Millisecond
+	retryMaxDelay  = 2 * time.Second
 )
 
 type Client struct {
@@ -85,6 +93,55 @@ func (cl *Client) IsConnected() bool {
 	return cl.ldapConnection != nil
 }
 
+func (cl *Client) reconnect(ctx context.Context) error {
+	cl.connMu.Lock()
+	defer cl.connMu.Unlock()
+
+	if cl.ldapConnection != nil && !cl.ldapConnection.IsClosing() {
+		return nil
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := retryDelay(attempt - 1)
+			cl.Logger.Info(ctx, "Retrying LDAP connection", map[string]interface{}{
+				"attempt": attempt,
+				"delay":   delay.String(),
+			})
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		conn, err := cl.connect()
+		if err == nil {
+			cl.Logger.Info(ctx, "Reconnected to LDAP server", map[string]interface{}{})
+			cl.ldapConnection = conn
+			return nil
+		}
+
+		lastErr = err
+		cl.Logger.Error(ctx, "LDAP connection attempt failed", map[string]interface{}{
+			"attempt": attempt,
+			"error":   err.Error(),
+		})
+	}
+
+	return fmt.Errorf("failed to reconnect to LDAP after %d attempts: %w", maxRetries, lastErr)
+}
+
+func retryDelay(attempt int) time.Duration {
+	delay := retryBaseDelay * (1 << attempt)
+	if delay > retryMaxDelay {
+		delay = retryMaxDelay
+	}
+	jitter := time.Duration(rand.Int63n(int64(delay) / 2))
+	return delay + jitter
+}
+
 func (cl *Client) connect() (*ldap.Conn, error) {
 	scheme := "ldap"
 	if cl.useTLS {
@@ -137,14 +194,12 @@ func (cl *Client) connect() (*ldap.Conn, error) {
 	return conn, nil
 }
 
-// buildTLSConfig creates a TLS configuration based on the LDAP config
 func (cl *Client) buildTLSConfig(cfg *config.LDAPConfig) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		ServerName:         cfg.Host,
 		InsecureSkipVerify: cfg.TLSSkipVerify,
 	}
 
-	// If a CA certificate file is provided, load it
 	if cfg.TLSCACertFile != "" {
 		caCert, err := os.ReadFile(cfg.TLSCACertFile)
 		if err != nil {
@@ -157,7 +212,7 @@ func (cl *Client) buildTLSConfig(cfg *config.LDAPConfig) (*tls.Config, error) {
 		}
 
 		tlsConfig.RootCAs = caCertPool
-		tlsConfig.InsecureSkipVerify = false // Use proper verification with custom CA
+		tlsConfig.InsecureSkipVerify = false
 
 		cl.Logger.Info(context.Background(), "Loaded custom CA certificate for LDAP TLS", map[string]interface{}{
 			"ca_cert_file": cfg.TLSCACertFile,

@@ -31,7 +31,7 @@ run: ## Run the application locally
 test:
 	@echo "Running tests with Allure..."
 	mkdir -p ./tests/allure-results && rm -rf ./tests/allure-results/*
-	export ALLURE_OUTPUT_PATH=$(PWD)/tests && $(GO) test -coverprofile=./tests/coverage.out -v ./...
+	export ALLURE_OUTPUT_PATH=$(PWD)/tests && $(GO) test -cover -coverprofile=./tests/coverage.out -v ./...
 	$(GO) tool cover -html=./tests/coverage.out -o ./tests/coverage.html
 
 allure:
