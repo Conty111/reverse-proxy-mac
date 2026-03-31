@@ -82,7 +82,6 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 	grpc_health_v1.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
-
 	s.logger.Info(ctx, "gRPC server starting", map[string]interface{}{"address": addr})
 
 	s.running = true

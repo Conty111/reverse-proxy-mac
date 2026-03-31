@@ -294,7 +294,6 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 	}, nil
 }
 
-
 // GetMatchingURISecurityContexts searches LDAP for all aldURIMACRule entries bound to
 // the given host service principal whose path matches requestPath (exact, prefix, or
 // regex). All matching rules are returned as URISecurityContext.

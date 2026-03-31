@@ -29,7 +29,7 @@ func NewAuthServiceV3(authorizer auth.Authorizer, log logger.Logger) *AuthServic
 func (s *AuthServiceV3) Check(ctx context.Context, req *envoy_auth.CheckRequest) (*envoy_auth.CheckResponse, error) {
 	// Convert Envoy request to our internal format
 	authReq := s.convertToAuthRequest(req)
-	
+
 	// Perform authorization
 	authResp, err := s.authorizer.Authorize(ctx, authReq)
 	if err != nil {
