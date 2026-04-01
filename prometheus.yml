@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "mac-authserver"
+    static_configs:
+      - targets: ["mac-authserver:8080"]
+    metrics_path: /metrics
+
+  - job_name: "envoy"
+    static_configs:
+      - targets: ["envoy:9901"]
+    metrics_path: /stats/prometheus
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

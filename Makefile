@@ -75,13 +75,23 @@ docker-build:
 
 docker-up: ## Start services with docker-compose
 	@echo "Starting services..."
-	$(DOCKER_COMPOSE) up -d
+	$(DOCKER_COMPOSE) up -d mac-authserver envoy
 
 docker-down: ## Stop services with docker-compose
 	@echo "Stopping services..."
-	$(DOCKER_COMPOSE) down
+	$(DOCKER_COMPOSE) down mac-authserver envoy
 
 docker-restart: docker-down docker-up ## Restart services
+
+compose-up:
+	@echo "Starting services..."
+	$(DOCKER_COMPOSE) up -d
+
+compose-down:
+	@echo "Stopping services..."
+	$(DOCKER_COMPOSE) down
+
+compose-restart: compose-down compose-up
 
 clean: ## Clean build artifacts
 	@echo "Cleaning..."

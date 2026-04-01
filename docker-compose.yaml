@@ -31,6 +31,7 @@ services:
   envoy:
     image: envoyproxy/envoy:v1.36.4
     container_name: envoy-proxy
+    hostname: envoy
     volumes:
       - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
     ports:
@@ -44,6 +45,44 @@ services:
     #     condition: service_healthy
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v3.3.0
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    networks:
+      - proxy-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.6.1
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - proxy-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 networks:
   proxy-network:
     driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
