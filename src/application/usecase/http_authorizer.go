@@ -12,18 +12,21 @@ import (
 
 	"reverse-proxy-mac/src/domain/auth"
 	"reverse-proxy-mac/src/domain/logger"
+	"reverse-proxy-mac/src/infrastructure/cache"
 	"reverse-proxy-mac/src/infrastructure/ldap"
 )
 
 type HTTPAuthorizer struct {
 	logger     logger.Logger
 	ldapClient *ldap.Client
+	cache      *cache.Store
 }
 
-func NewHTTPAuthorizer(log logger.Logger, ldapClient *ldap.Client) (*HTTPAuthorizer, error) {
+func NewHTTPAuthorizer(log logger.Logger, ldapClient *ldap.Client, store *cache.Store) (*HTTPAuthorizer, error) {
 	return &HTTPAuthorizer{
 		logger:     log,
 		ldapClient: ldapClient,
+		cache:      store,
 	}, nil
 }
 
@@ -102,8 +105,8 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		}, nil
 	}
 
-	// Get host security context
-	hostSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, hostFQDN)
+	// Get host security context (cache-first)
+	hostSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, a.cache, hostFQDN)
 	if err != nil {
 		a.logger.Error(ctx, "Failed to GetHostSecurityContext", map[string]interface{}{
 			"fqdn":  hostFQDN,
@@ -150,7 +153,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 
 	// Perform URI-level MAC authorization check against all matching rules.
 	// If no URI rule is found for the requested path, access is allowed (URI rules are optional).
-	uriSecCtxs, err := GetMatchingURISecurityContexts(ctx, a.ldapClient, hostFQDN, req.HTTPPath)
+	uriSecCtxs, err := GetMatchingURISecurityContexts(ctx, a.ldapClient, a.cache, hostFQDN, req.HTTPPath)
 	if err != nil {
 		a.logger.Error(ctx, "Failed to GetMatchingURISecurityContexts", map[string]interface{}{
 			"fqdn":  hostFQDN,
@@ -294,17 +297,23 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 	}, nil
 }
 
-// GetMatchingURISecurityContexts searches LDAP for all aldURIMACRule entries bound to
-// the given host service principal whose path matches requestPath (exact, prefix, or
-// regex). All matching rules are returned as URISecurityContext.
+// GetMatchingURISecurityContexts returns all URI security contexts that match
+// the given host FQDN and request path.
 //
-// NOTE: The x-ald-uri-service-ref attribute stores full Kerberos principal DNs
-// (e.g. "krbprincipalname=HTTP/host.domain@REALM,cn=services,..."). OpenLDAP may
-// define this attribute with only an EQUALITY matching rule, which means substring
-// filters (*hostname*) silently return no results. To work around this, we fetch all
-// aldURIMACRule entries and perform the service-ref filtering in Go.
-func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQDN, requestPath string) ([]*auth.URISecurityContext, error) {
-	// Search for all URI MAC rules in LDAP
+// When a cache.Store is provided it uses the fast trie+bitset algorithm
+// (see store.MatchingURIRules). On a cache miss (host not in cache) or when
+// store is nil it falls back to a full LDAP scan.
+func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, store *cache.Store, hostFQDN, requestPath string) ([]*auth.URISecurityContext, error) {
+	// Fast path: cache lookup.
+	if store != nil {
+		ctxs, found := store.MatchingURIRules(hostFQDN, requestPath)
+		if found {
+			return ctxs, nil
+		}
+		// Host not in cache — fall through to LDAP.
+	}
+
+	// Slow path: full LDAP scan (same logic as before, kept as fallback).
 	entries, err := cl.Search(ctx, "(objectClass=aldURIMACRule)", auth.AllURIMACAttributes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search URI MAC rules in LDAP: %w", err)
@@ -313,9 +322,6 @@ func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQ
 	var matched []*auth.URISecurityContext
 
 	for _, entry := range entries {
-		// Filter by service ref: the attribute value is a full DN that contains the
-		// host FQDN as part of the Kerberos principal name. We check all values of
-		// the multi-valued attribute for a case-insensitive substring match.
 		serviceRefs := entry.GetAttributeValues(auth.URIServiceRefAttribute)
 		refMatched := false
 		for _, ref := range serviceRefs {
@@ -328,25 +334,21 @@ func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQ
 			continue
 		}
 
-		// Get URI path
 		uriPath := entry.GetAttributeValue(auth.URIPathAttribute)
 		if uriPath == "" {
 			continue
 		}
 
-		// Get MAC value
 		macValue := entry.GetAttributeValue(auth.URIMacAttribute)
 		if macValue == "" {
 			continue
 		}
 
-		// Determine match type
 		matchType := auth.URIMatchType(entry.GetAttributeValue(auth.URIMatchTypeAttribute))
 		if matchType == "" {
 			matchType = auth.URIMatchExact
 		}
 
-		// Check if path matches based on match type
 		switch matchType {
 		case auth.URIMatchExact:
 			if requestPath != uriPath {
@@ -371,7 +373,6 @@ func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQ
 			}
 		}
 
-		// Parse MAC label
 		label, err := parseMacLabel(macValue)
 		if err != nil {
 			cl.Logger.Warn(ctx, "failed to parse URI MAC label, skipping rule", map[string]interface{}{
@@ -381,7 +382,6 @@ func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQ
 			continue
 		}
 
-		// Parse integrity categories
 		var integrityCategories uint32
 		micValue := entry.GetAttributeValue(auth.URIIntegrityCategoriesAttribute)
 		if micValue != "" {
@@ -396,7 +396,6 @@ func GetMatchingURISecurityContexts(ctx context.Context, cl *ldap.Client, hostFQ
 			integrityCategories = uint32(parsed)
 		}
 
-		// Create URI security context
 		uriCtx := &auth.URISecurityContext{
 			Path:                uriPath,
 			ConfidentialityMin:  label.ConfMin,
