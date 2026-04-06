@@ -90,8 +90,6 @@ func (s *HTTPServer) Start(ctx context.Context) error {
 		}
 	}()
 
-	s.logger.Info(ctx, "HTTP server started successfully", map[string]interface{}{"address": addr})
-
 	return nil
 }
 

@@ -144,7 +144,8 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 
 	return &auth.AuthResponse{
 		Decision: auth.DecisionAllow,
-		Reason:   fmt.Sprintf("Transport authorization successful from %s to %s", sourceFQDN, destFQDN),
+		Reason: "Alway allow",
+		// Reason:   fmt.Sprintf("Transport authorization successful from %s to %s", sourceFQDN, destFQDN),
 		Headers:  map[string]string{},
 	}, nil
 }

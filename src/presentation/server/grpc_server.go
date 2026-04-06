@@ -51,22 +51,6 @@ func NewGRPCServer(
 	}
 }
 
-// NewAuthOnlyGRPCServer creates a gRPC server that registers only the Authorization service.
-// Used for transport-level ext_authz on a dedicated port.
-func NewAuthOnlyGRPCServer(
-	host string,
-	port int,
-	authSvc envoy_auth.AuthorizationServer,
-	log logger.Logger,
-) *GRPCServer {
-	return &GRPCServer{
-		host:    host,
-		port:    port,
-		authSvc: authSvc,
-		logger:  log,
-	}
-}
-
 func (s *GRPCServer) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -113,8 +97,6 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 			s.logger.Error(context.Background(), "gRPC server error", map[string]interface{}{"error": err.Error()})
 		}
 	}()
-
-	s.logger.Info(ctx, "gRPC server started successfully", map[string]interface{}{"address": addr})
 
 	return nil
 }

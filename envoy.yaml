@@ -13,22 +13,15 @@ static_resources:
         port_value: 8080
     filter_chains:
     - filters:
-      # Transport-level (L3/L4) authorization — runs first, before HTTP processing.
-      # Envoy sends a CheckRequest with source/destination IP:port (no HTTP data).
-      # The transport gRPC server (port 9002) handles these requests via TransportAuthorizer.
       - name: envoy.filters.network.ext_authz
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.network.ext_authz.v3.ExtAuthz
           grpc_service:
             envoy_grpc:
-              cluster_name: transport_ext_authz
-            timeout: 5s
-          failure_mode_allow: false
-          include_peer_certificate: true
+              cluster_name: ext_authz
           transport_api_version: V3
-          stat_prefix: transport_authz
-
-      # HTTP-level authorization — runs after transport check passes.
+          stat_prefix: ext_authz_tcp
+          failure_mode_allow: true
       - name: envoy.filters.network.http_connection_manager
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
@@ -54,30 +47,13 @@ static_resources:
               clear_route_cache: true
               failure_mode_allow: false
               include_peer_certificate: true
-              # Pass request headers to ext_authz - by default only some headers are passed
-              # We need to explicitly configure to pass all headers including Host
               transport_api_version: V3
+              stat_prefix: http_authz
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
   clusters:
-  # Transport-level ext_authz cluster — TransportAuthorizer on port 9002
-  - name: transport_ext_authz
-    type: STRICT_DNS
-    connect_timeout: 1s
-    http2_protocol_options: {}
-    load_assignment:
-      cluster_name: transport_ext_authz
-      endpoints:
-      - lb_endpoints:
-        - endpoint:
-            address:
-              socket_address:
-                address: mac-authserver
-                port_value: 9002
-
-  # HTTP-level ext_authz cluster — HTTPAuthorizer on port 9001
   - name: ext_authz
     type: STRICT_DNS
     connect_timeout: 1s
@@ -91,7 +67,7 @@ static_resources:
               socket_address:
                 address: mac-authserver
                 port_value: 9001
-  
+
   - name: backend_service
     type: STRICT_DNS
     connect_timeout: 1s
