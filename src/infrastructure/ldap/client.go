@@ -63,9 +63,12 @@ func NewClient(cfg *config.LDAPConfig, log logger.Logger) (*Client, error) {
 
 	conn, err := c.connect()
 	if err != nil {
+		ldapConnectionsTotal.WithLabelValues("error").Inc()
 		return nil, fmt.Errorf("failed to connect to LDAP: %w", err)
 	}
 	c.ldapConnection = conn
+	ldapConnectionsTotal.WithLabelValues("success").Inc()
+	ldapConnectionUp.Set(1)
 
 	return c, nil
 }
@@ -82,6 +85,7 @@ func (cl *Client) Close() error {
 			return err
 		}
 		cl.ldapConnection = nil
+		ldapConnectionUp.Set(0)
 	}
 	return nil
 }
@@ -121,6 +125,8 @@ func (cl *Client) reconnect(ctx context.Context) error {
 		if err == nil {
 			cl.Logger.Info(ctx, "Reconnected to LDAP server", map[string]interface{}{})
 			cl.ldapConnection = conn
+			ldapReconnectsTotal.WithLabelValues("success").Inc()
+			ldapConnectionUp.Set(1)
 			return nil
 		}
 
@@ -131,6 +137,8 @@ func (cl *Client) reconnect(ctx context.Context) error {
 		})
 	}
 
+	ldapReconnectsTotal.WithLabelValues("error").Inc()
+	ldapConnectionUp.Set(0)
 	return fmt.Errorf("failed to reconnect to LDAP after %d attempts: %w", maxRetries, lastErr)
 }
 

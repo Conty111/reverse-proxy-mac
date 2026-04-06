@@ -37,6 +37,9 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 		filter, attributes, nil,
 	)
 
+	// Start measuring search duration for Prometheus metrics.
+	searchStart := time.Now()
+
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
@@ -47,6 +50,8 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 			})
 			select {
 			case <-ctx.Done():
+				ldapSearchTotal.WithLabelValues("error").Inc()
+				ldapSearchDuration.Observe(time.Since(searchStart).Seconds())
 				return nil, ctx.Err()
 			case <-time.After(delay):
 			}
@@ -58,6 +63,9 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 
 		result, err := conn.Search(searchRequest)
 		if err == nil {
+			ldapSearchTotal.WithLabelValues("success").Inc()
+			ldapSearchDuration.Observe(time.Since(searchStart).Seconds())
+
 			cl.Logger.Info(ctx, "LDAP search successful", map[string]interface{}{
 				"attempt": attempt,
 				"entries": len(result.Entries),
@@ -85,6 +93,9 @@ func (cl *Client) Search(ctx context.Context, filter string, attributes []string
 			break // If reconnect failed, we can't do anything more
 		}
 	}
+
+	ldapSearchTotal.WithLabelValues("error").Inc()
+	ldapSearchDuration.Observe(time.Since(searchStart).Seconds())
 
 	return nil, fmt.Errorf("LDAP search failed: %w", lastErr)
 }

@@ -8,6 +8,7 @@ import (
 
 	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	ext_proc "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -35,6 +36,8 @@ type GRPCServer struct {
 
 // NewGRPCServer creates a new gRPC server instance with the specified configuration.
 // Registers both the Authorization service and the ExternalProcessor service.
+// Prometheus gRPC metrics (latency histograms, RPS, per-method stats) are
+// automatically collected via go-grpc-prometheus interceptors.
 func NewGRPCServer(
 	host string,
 	port int,
@@ -42,6 +45,11 @@ func NewGRPCServer(
 	extProcSvc ext_proc.ExternalProcessorServer,
 	log logger.Logger,
 ) *GRPCServer {
+	// Enable latency histogram on the default (auto-registered) server metrics.
+	// This populates grpc_server_handling_seconds buckets required by the
+	// Grafana "gRPC Go" dashboard (ID 14765).
+	grpc_prometheus.EnableHandlingTimeHistogram()
+
 	return &GRPCServer{
 		host:       host,
 		port:       port,
@@ -68,9 +76,17 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 	}
 	s.listener = listener
 
-	// Create gRPC server with options
+	// Create gRPC server with Prometheus interceptors for metrics collection.
+	// The default grpc_prometheus interceptors record:
+	//   - grpc_server_started_total
+	//   - grpc_server_handled_total        (RPS, gRPC status codes)
+	//   - grpc_server_handling_seconds      (latency histogram)
+	//   - grpc_server_msg_received_total
+	//   - grpc_server_msg_sent_total
 	opts := []grpc.ServerOption{
 		grpc.MaxConcurrentStreams(defaultMaxConcurrentStreams),
+		grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
+		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
 	}
 	s.server = grpc.NewServer(opts...)
 
@@ -86,6 +102,11 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 	s.healthServer = health.NewServer()
 	grpc_health_v1.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+
+	// Initialize gRPC Prometheus metrics after all services are registered.
+	// This pre-populates zero-valued counters for every registered method so
+	// that Prometheus/Grafana can discover them immediately.
+	grpc_prometheus.Register(s.server)
 
 	s.logger.Info(ctx, "gRPC server starting", map[string]interface{}{"address": addr})
 
