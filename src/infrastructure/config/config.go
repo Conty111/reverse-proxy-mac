@@ -12,12 +12,12 @@ import (
 
 // Default configuration values.
 const (
-	DefaultGRPCPort          = 9001
-	DefaultHTTPPort          = 8080
-	DefaultHost              = "0.0.0.0"
-	DefaultLogLevel          = "info"
-	DefaultLDAPPort          = 389
-	DefaultLDAPSPort         = 636
+	DefaultGRPCPort  = 9001
+	DefaultHTTPPort  = 8080
+	DefaultHost      = "0.0.0.0"
+	DefaultLogLevel  = "info"
+	DefaultLDAPPort  = 389
+	DefaultLDAPSPort = 636
 )
 
 type Config struct {
@@ -27,9 +27,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	GRPCPort			  int	`json:"grpc_port"`
-	HTTPPort              int    `json:"http_port"`
-	Host                  string `json:"host"`
+	GRPCPort int    `json:"grpc_port"`
+	HTTPPort int    `json:"http_port"`
+	Host     string `json:"host"`
 }
 
 type LogConfig struct {

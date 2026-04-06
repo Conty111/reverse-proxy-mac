@@ -35,11 +35,11 @@ func run(ctx context.Context) error {
 	log := logging.NewConsoleLogger(cfg.Log.GetLogLevel(), cfg.Log.JSONFormat)
 
 	log.Info(ctx, "Starting mac-authserver", map[string]interface{}{
-		"config_path":         *configPath,
-		"grpc_port":           cfg.Server.GRPCPort,
+		"config_path": *configPath,
+		"grpc_port":   cfg.Server.GRPCPort,
 		// "transport_grpc_port": cfg.Server.TransportAuthGRPCPort,
-		"http_port":           cfg.Server.HTTPPort,
-		"log_level":           cfg.Log.Level,
+		"http_port": cfg.Server.HTTPPort,
+		"log_level": cfg.Log.Level,
 	})
 
 	ldapClient, err := ldap.NewClient(
