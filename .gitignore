@@ -1,9 +1,9 @@
 tests/*
 .env
 .$*
+
 # Compiled WASM
 *.wasm
-*.drawio
 # Kerberos keytab files - NEVER commit these!
 *.keytab
 krb5.keytab

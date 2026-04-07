@@ -18,6 +18,7 @@ const (
 	DefaultLogLevel  = "info"
 	DefaultLDAPPort  = 389
 	DefaultLDAPSPort = 636
+	DefaultCacheTTLSeconds = 1800
 )
 
 type Config struct {
