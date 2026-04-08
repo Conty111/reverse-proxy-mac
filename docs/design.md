@@ -2,7 +2,7 @@
 
 ## Overview
 
-![Краткая архитектура](./overview.png)
+![Краткая архитектура](./mac-reverse-proxy.drawio.png)
 
 ## Компоненты
 
