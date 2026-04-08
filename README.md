@@ -122,4 +122,5 @@ grpcurl -plaintext localhost:9001 grpc.health.v1.Health/Check
 - [Сброс пароля администратора контроллера домена](./docs/runbooks/dc-reset-password.md)
 - [Развертывание контроллера домена ALD Pro 3.0.0](https://www.aldpro.ru/professional/ALD_Pro_Module_02/ALD_Pro_deployment.html#aldpro-dc-packages-install)
 - [Развертывание контроллера домена FreeIPA на Astra Linux](https://wiki.astralinux.ru/pages/viewpage.action?pageId=27362143)
+- [Ввод Astra Linux в домен FreeIPA](https://wiki.astralinux.ru/pages/viewpage.action?pageId=60359750)
 - [Чтение пользовательских атрибутов (настройка прав)](https://wiki.astralinux.ru/pages/viewpage.action?pageId=153488486)

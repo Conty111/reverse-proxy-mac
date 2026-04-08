@@ -1,0 +1,19 @@
+cloud_id  = "..." # yc resource-manager cloud list
+folder_id = "..." # yc resource-manager folder list
+
+zone = "ru-central1-d"
+
+image_id = "..."
+
+network_id  = "..."
+subnet_name = "freeipa-subnet"
+subnet_cidr = ["10.10.10.0/24"]
+
+domain = "ald.company.lan"
+
+ssh_user       = "admin"
+ssh_public_key = "..."
+
+dc_name     = "dc-1"
+client_name = "host-1"
+client_nat  = true
