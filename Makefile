@@ -71,7 +71,7 @@ deps:
 # Docker targets
 docker-build:
 	@echo "Building Docker image..."
-	docker build -t $(DOCKER_IMAGE):latest .
+	docker build -t $(DOCKER_IMAGE):cache .
 
 docker-up: ## Start services with docker-compose
 	@echo "Starting services..."

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"reverse-proxy-mac/src/domain/auth"
+	"reverse-proxy-mac/src/infrastructure/cache"
 	"reverse-proxy-mac/src/infrastructure/ldap"
 )
 
@@ -71,8 +72,18 @@ func parseMacLabel(mac string) (*macLabel, error) {
 	return &label, nil
 }
 
-func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, fqdn string) (*auth.HostSecurityContext, error) {
-	// Search for host in LDAP
+// GetHostSecurityContext returns the host security context for the given FQDN.
+// It first tries the in-memory cache; on a cache miss it falls back to LDAP.
+func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, store *cache.Store, fqdn string) (*auth.HostSecurityContext, error) {
+	// Fast path: cache hit.
+	if store != nil {
+		if cached := store.LookupHost(fqdn); cached != nil {
+			sc := cached.SecurityContext
+			return &sc, nil
+		}
+	}
+
+	// Slow path: LDAP lookup (also used when cache is nil, e.g. in tests).
 	hostEntries, err := cl.Search(ctx, fmt.Sprintf("(fqdn=%s)", fqdn), auth.AllMacHostAttributes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search host in LDAP: %w", err)

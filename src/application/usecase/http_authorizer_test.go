@@ -38,7 +38,7 @@ func (s *HTTPAuthorizerSuite) TestMissingAuthorizationHeader(t provider.T) {
 		mockLog := &mockLogger{}
 		mockLDAP := &infraldap.Client{Logger: mockLog}
 
-		authorizer, err := NewHTTPAuthorizer(mockLog, mockLDAP)
+		authorizer, err := NewHTTPAuthorizer(mockLog, mockLDAP, nil)
 		sCtx.Require().NoError(err)
 		sCtx.Require().NotNil(authorizer)
 
@@ -81,7 +81,7 @@ func (s *HTTPAuthorizerSuite) TestInvalidAuthorizationScheme(t provider.T) {
 
 	mockLog := &mockLogger{}
 	mockLDAP := &infraldap.Client{Logger: mockLog}
-	authorizer, _ := NewHTTPAuthorizer(mockLog, mockLDAP)
+	authorizer, _ := NewHTTPAuthorizer(mockLog, mockLDAP, nil)
 
 	testCases := []struct {
 		name   string
@@ -122,7 +122,7 @@ func (s *HTTPAuthorizerSuite) TestInvalidBase64Token(t provider.T) {
 
 	mockLog := &mockLogger{}
 	mockLDAP := &infraldap.Client{Logger: mockLog}
-	authorizer, _ := NewHTTPAuthorizer(mockLog, mockLDAP)
+	authorizer, _ := NewHTTPAuthorizer(mockLog, mockLDAP, nil)
 
 	req := &auth.AuthRequest{
 		RequestID:  "test-003",
@@ -261,7 +261,7 @@ func (s *HTTPAuthorizerSuite) TestCreateUnauthorizedResponse(t provider.T) {
 
 	mockLog := &mockLogger{}
 	mockLDAP := &infraldap.Client{Logger: mockLog}
-	authorizer, _ := NewHTTPAuthorizer(mockLog, mockLDAP)
+	authorizer, _ := NewHTTPAuthorizer(mockLog, mockLDAP, nil)
 
 	resp := authorizer.createUnauthorizedResponse()
 

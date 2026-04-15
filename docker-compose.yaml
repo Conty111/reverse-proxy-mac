@@ -5,12 +5,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mac-authserver:latest
+    image: mac-authserver:cache
     container_name: mac-authserver
     hostname: mac-authserver
     ports:
       - "9001:9001"
-      - "9002:9002"
       - "8000:8080"
     volumes:
       - ./config.json:/app/config.json:ro
@@ -25,12 +24,15 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    # For tests ONLY
+    # (to make reverse dns lookup possible)
     extra_hosts:
     # Source
-      - "app-low.ald.company.lan:172.20.0.1"
+      - "app-mid.ald.company.lan:172.20.0.1"
     # Destination 
-      - "app-low.ald.company.lan:172.20.0.2"
-      - "app-low.ald.company.lan:172.20.0.3"
+      - "app-mid.ald.company.lan:172.20.0.2"
+      - "app-mid.ald.company.lan:172.20.0.3"
+      - "app-mid.ald.company.lan:172.20.0.4"
 
   envoy:
     image: envoyproxy/envoy:v1.36.4
@@ -44,6 +46,7 @@ services:
     command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
     restart: unless-stopped
 
+  # Example of how metrics can be pulled and served
   prometheus:
     image: prom/prometheus:v3.3.0
     container_name: prometheus

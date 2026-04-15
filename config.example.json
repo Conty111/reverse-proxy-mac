@@ -20,6 +20,7 @@
     "base_dn": "dc=ald,dc=company,dc=lan",
     "tls": true,
     "tls_skip_verify": true,
-    "tls_ca_cert_file": ""
+    "tls_ca_cert_file": "",
+    "cache_ttl_seconds": 1800
   }
 }

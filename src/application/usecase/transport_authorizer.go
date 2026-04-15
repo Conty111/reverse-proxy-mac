@@ -8,18 +8,21 @@ import (
 
 	"reverse-proxy-mac/src/domain/auth"
 	"reverse-proxy-mac/src/domain/logger"
+	"reverse-proxy-mac/src/infrastructure/cache"
 	"reverse-proxy-mac/src/infrastructure/ldap"
 )
 
 type TransportAuthorizer struct {
 	logger     logger.Logger
 	ldapClient *ldap.Client
+	cache      *cache.Store
 }
 
-func NewTransportAuthorizer(log logger.Logger, ldapClient *ldap.Client) (*TransportAuthorizer, error) {
+func NewTransportAuthorizer(log logger.Logger, ldapClient *ldap.Client, store *cache.Store) (*TransportAuthorizer, error) {
 	return &TransportAuthorizer{
 		logger:     log,
 		ldapClient: ldapClient,
+		cache:      store,
 	}, nil
 }
 
@@ -71,8 +74,8 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 		"dest_fqdn":   destFQDN,
 	})
 
-	// Get source host security context
-	sourceSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, sourceFQDN)
+	// Get source host security context (cache-first)
+	sourceSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, a.cache, sourceFQDN)
 	if err != nil {
 		a.logger.Error(ctx, "Failed to get source host security context", map[string]interface{}{
 			"fqdn":  sourceFQDN,
@@ -95,8 +98,8 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 		"integrity_cats": fmt.Sprintf("0x%x", sourceSecCtx.IntegrityCategories),
 	})
 
-	// Get destination host security context
-	destSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, destFQDN)
+	// Get destination host security context (cache-first)
+	destSecCtx, err := GetHostSecurityContext(ctx, a.ldapClient, a.cache, destFQDN)
 	if err != nil {
 		a.logger.Error(ctx, "Failed to get destination host security context", map[string]interface{}{
 			"fqdn":  destFQDN,
@@ -144,9 +147,8 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 
 	return &auth.AuthResponse{
 		Decision: auth.DecisionAllow,
-		Reason:   "Alway allow",
-		// Reason:   fmt.Sprintf("Transport authorization successful from %s to %s", sourceFQDN, destFQDN),
-		Headers: map[string]string{},
+		Reason:   fmt.Sprintf("Transport authorization successful from %s to %s", sourceFQDN, destFQDN),
+		Headers:  map[string]string{},
 	}, nil
 }
 

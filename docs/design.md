@@ -2,7 +2,7 @@
 
 ## Overview
 
-![Краткая архитектура](./overview.svg)
+![Краткая архитектура](./mac-reverse-proxy.drawio.png)
 
 ## Компоненты
 
@@ -31,9 +31,9 @@ https://www.freeipa.org/page/HowTo/LDAP
 
 ### Авторизация HTTP (L7)
 
-![HTTP авторизация](./sequence-HTTP.drawio.svg)
+![HTTP авторизация](./sequence-HTTP.drawio.png)
 
 
 ### Авторизация transport (L3-L4)
 
-![transport авторизация](./sequence-transport.drawio.svg)
+![transport авторизация](./sequence-transport.drawio.png)

@@ -12,12 +12,13 @@ import (
 
 // Default configuration values.
 const (
-	DefaultGRPCPort  = 9001
-	DefaultHTTPPort  = 8080
-	DefaultHost      = "0.0.0.0"
-	DefaultLogLevel  = "info"
-	DefaultLDAPPort  = 389
-	DefaultLDAPSPort = 636
+	DefaultGRPCPort        = 9001
+	DefaultHTTPPort        = 8080
+	DefaultHost            = "0.0.0.0"
+	DefaultLogLevel        = "info"
+	DefaultLDAPPort        = 389
+	DefaultLDAPSPort       = 636
+	DefaultCacheTTLSeconds = 1800
 )
 
 type Config struct {
@@ -38,13 +39,14 @@ type LogConfig struct {
 }
 
 type LDAPConfig struct {
-	TLS           bool           `json:"tls"`
-	Port          int            `json:"port"`
-	Host          string         `json:"host"`
-	BaseDN        string         `json:"base_dn"`
-	TLSSkipVerify bool           `json:"tls_skip_verify"`
-	TLSCACertFile string         `json:"tls_ca_cert_file"`
-	Kerberos      KerberosConfig `json:"kerberos"`
+	TLS             bool           `json:"tls"`
+	Port            int            `json:"port"`
+	Host            string         `json:"host"`
+	BaseDN          string         `json:"base_dn"`
+	TLSSkipVerify   bool           `json:"tls_skip_verify"`
+	TLSCACertFile   string         `json:"tls_ca_cert_file"`
+	Kerberos        KerberosConfig `json:"kerberos"`
+	CacheTTLSeconds int            `json:"cache_ttl_seconds"`
 }
 
 type KerberosConfig struct {
@@ -93,6 +95,9 @@ func (c *Config) setDefaults() {
 		} else {
 			c.LDAP.Port = DefaultLDAPPort
 		}
+	}
+	if c.LDAP.CacheTTLSeconds == 0 {
+		c.LDAP.CacheTTLSeconds = DefaultCacheTTLSeconds
 	}
 }
 

@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"reverse-proxy-mac/src/application/usecase"
+	"reverse-proxy-mac/src/infrastructure/cache"
 	"reverse-proxy-mac/src/infrastructure/config"
 	"reverse-proxy-mac/src/infrastructure/grpc"
 	"reverse-proxy-mac/src/infrastructure/ldap"
@@ -37,9 +39,8 @@ func run(ctx context.Context) error {
 	log.Info(ctx, "Starting mac-authserver", map[string]interface{}{
 		"config_path": *configPath,
 		"grpc_port":   cfg.Server.GRPCPort,
-		// "transport_grpc_port": cfg.Server.TransportAuthGRPCPort,
-		"http_port": cfg.Server.HTTPPort,
-		"log_level": cfg.Log.Level,
+		"http_port":   cfg.Server.HTTPPort,
+		"log_level":   cfg.Log.Level,
 	})
 
 	ldapClient, err := ldap.NewClient(
@@ -51,22 +52,28 @@ func run(ctx context.Context) error {
 		return err
 	}
 	defer func() {
-		// Close LDAP client
 		if err := ldapClient.Close(); err != nil {
 			log.Error(ctx, "Error closing LDAP client", map[string]interface{}{"error": err.Error()})
 		}
 	}()
 
-	httpAuthHandler, err := usecase.NewHTTPAuthorizer(
-		log,
-		ldapClient,
-	)
+	// Build the in-memory cache with an initial synchronous load from LDAP.
+	cacheTTL := time.Duration(cfg.LDAP.CacheTTLSeconds) * time.Second
+	macCache, err := cache.NewStore(ctx, ldapClient, log, cacheTTL)
+	if err != nil {
+		log.Error(ctx, "Failed to initialize MAC policy cache", map[string]interface{}{"error": err.Error()})
+		return err
+	}
+	// Start the background refresh goroutine; it stops when ctx is cancelled.
+	macCache.Start(ctx)
+
+	httpAuthHandler, err := usecase.NewHTTPAuthorizer(log, ldapClient, macCache)
 	if err != nil {
 		log.Error(ctx, "Failed to initialize httpAuthHandler", map[string]interface{}{"error": err.Error()})
 		return err
 	}
 
-	transportAuthHandler, err := usecase.NewTransportAuthorizer(log, ldapClient)
+	transportAuthHandler, err := usecase.NewTransportAuthorizer(log, ldapClient, macCache)
 	if err != nil {
 		log.Error(ctx, "Failed to initialize transportAuthHandler", map[string]interface{}{"error": err.Error()})
 		return err
@@ -109,10 +116,6 @@ func run(ctx context.Context) error {
 	if err := grpcServer.Stop(ctx); err != nil {
 		log.Error(ctx, "Error stopping gRPC server", map[string]interface{}{"error": err.Error()})
 	}
-
-	// if err := transportGRPCServer.Stop(ctx); err != nil {
-	// 	log.Error(ctx, "Error stopping transport gRPC server", map[string]interface{}{"error": err.Error()})
-	// }
 
 	log.Info(ctx, "Service stopped successfully", nil)
 	return nil
