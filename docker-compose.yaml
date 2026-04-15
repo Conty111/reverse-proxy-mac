@@ -28,11 +28,11 @@ services:
     # (to make reverse dns lookup possible)
     extra_hosts:
     # Source
-      - "app-low.ald.company.lan:172.20.0.1"
+      - "app-mid.ald.company.lan:172.20.0.1"
     # Destination 
-      - "app-low.ald.company.lan:172.20.0.2"
-      - "app-low.ald.company.lan:172.20.0.3"
-      - "app-low.ald.company.lan:172.20.0.4"
+      - "app-mid.ald.company.lan:172.20.0.2"
+      - "app-mid.ald.company.lan:172.20.0.3"
+      - "app-mid.ald.company.lan:172.20.0.4"
 
   envoy:
     image: envoyproxy/envoy:v1.36.4

@@ -37,10 +37,10 @@ func run(ctx context.Context) error {
 	log := logging.NewConsoleLogger(cfg.Log.GetLogLevel(), cfg.Log.JSONFormat)
 
 	log.Info(ctx, "Starting mac-authserver", map[string]interface{}{
-		"config_path":         *configPath,
-		"grpc_port":           cfg.Server.GRPCPort,
-		"http_port":           cfg.Server.HTTPPort,
-		"log_level":           cfg.Log.Level,
+		"config_path": *configPath,
+		"grpc_port":   cfg.Server.GRPCPort,
+		"http_port":   cfg.Server.HTTPPort,
+		"log_level":   cfg.Log.Level,
 	})
 
 	ldapClient, err := ldap.NewClient(
@@ -116,10 +116,6 @@ func run(ctx context.Context) error {
 	if err := grpcServer.Stop(ctx); err != nil {
 		log.Error(ctx, "Error stopping gRPC server", map[string]interface{}{"error": err.Error()})
 	}
-
-	// if err := transportGRPCServer.Stop(ctx); err != nil {
-	// 	log.Error(ctx, "Error stopping transport gRPC server", map[string]interface{}{"error": err.Error()})
-	// }
 
 	log.Info(ctx, "Service stopped successfully", nil)
 	return nil

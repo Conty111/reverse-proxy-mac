@@ -30,8 +30,8 @@ type CachedURIRule struct {
 
 // snapshot is an immutable, fully-built cache state swapped in atomically.
 type snapshot struct {
-	hosts    *HostTrie
-	uriTrie  *URITrie
+	hosts   *HostTrie
+	uriTrie *URITrie
 	// regexRules contains only URIMatchRegex rules.
 	regexRules []*CachedURIRule
 	// allRules is the flat slice indexed by RuleID, used for O(1) rule lookup.

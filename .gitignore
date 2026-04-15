@@ -1,7 +1,7 @@
 tests/*
 .env
 .$*
-
+.code*
 # Compiled WASM
 *.wasm
 # Kerberos keytab files - NEVER commit these!

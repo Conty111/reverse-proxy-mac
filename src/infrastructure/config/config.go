@@ -12,12 +12,12 @@ import (
 
 // Default configuration values.
 const (
-	DefaultGRPCPort  = 9001
-	DefaultHTTPPort  = 8080
-	DefaultHost      = "0.0.0.0"
-	DefaultLogLevel  = "info"
-	DefaultLDAPPort  = 389
-	DefaultLDAPSPort = 636
+	DefaultGRPCPort        = 9001
+	DefaultHTTPPort        = 8080
+	DefaultHost            = "0.0.0.0"
+	DefaultLogLevel        = "info"
+	DefaultLDAPPort        = 389
+	DefaultLDAPSPort       = 636
 	DefaultCacheTTLSeconds = 1800
 )
 
