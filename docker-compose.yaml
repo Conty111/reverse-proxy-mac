@@ -13,7 +13,8 @@ services:
       - "8000:8080"
     volumes:
       - ./config.json:/app/config.json:ro
-      - ./mac-authserver.keytab:/etc/mac-authserver.keytab:ro
+      # - ./mac-authserver.keytab:/etc/mac-authserver.keytab:ro
+      - ./authserver.keytab:/etc/authserver.keytab:ro
       - ./krb5.conf:/etc/krb5.conf:ro
     environment:
       - CONFIG_PATH=/app/config.json
@@ -28,11 +29,11 @@ services:
     # (to make reverse dns lookup possible)
     extra_hosts:
     # Source
-      - "app-mid.ald.company.lan:172.20.0.1"
+      - "host-1.ald.company.lan:172.20.0.1"
     # Destination 
-      - "app-mid.ald.company.lan:172.20.0.2"
-      - "app-mid.ald.company.lan:172.20.0.3"
-      - "app-mid.ald.company.lan:172.20.0.4"
+      - "host-1.ald.company.lan:172.20.0.2"
+      - "host-1.ald.company.lan:172.20.0.3"
+      - "host-1.ald.company.lan:172.20.0.4"
 
   envoy:
     image: envoyproxy/envoy:v1.36.4

@@ -27,9 +27,9 @@
 
 ```bash
 ipa host-mod ${TARGET_HOST} \
-  --addattr=objectClass=aldHostContext
-ipa host-mod ${TARGET_HOST} \
-  --addattr=x-ald-host-mac="2:0x1:3:0xFF"
+--addattr=objectClass=aldHostContext \
+--addattr=x-ald-host-mac="2:0x1:3:0xFF" \
+--addattr=x-ald-host-mic-level="0x0"
 ```
 
 Формат атрибутов аналогичен формату атрибутов пользователей:

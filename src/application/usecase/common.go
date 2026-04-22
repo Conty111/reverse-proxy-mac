@@ -167,14 +167,17 @@ func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool)
 		}
 	}
 
+	return true, "MAC: access granted"
+}
+
+func checkIntegrity(subject, object auth.SecurityContext) (bool, string) {
 	// Check integrity categories
 	// User's integrity categories must include all bits of object's integrity categories
 	subjectIntegrityCategories := subject.GetIntegrityCategories()
 	objectIntegrityCategories := object.GetIntegrityCategories()
 	if (subjectIntegrityCategories & objectIntegrityCategories) != objectIntegrityCategories {
-		return false, fmt.Sprintf("MAC: access denied - user integrity categories 0x%x do not include all required object integrity categories 0x%x",
+		return false, fmt.Sprintf("integrity: access denied - user integrity categories 0x%x do not include all required object integrity categories 0x%x",
 			subjectIntegrityCategories, objectIntegrityCategories)
 	}
-
-	return true, "MAC: access granted - all security checks passed"
+	return true, "integrity: access granted"
 }

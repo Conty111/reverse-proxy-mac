@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jcmturner/gokrb5/v8/credentials"
+
 	"reverse-proxy-mac/src/domain/auth"
 	"reverse-proxy-mac/src/domain/logger"
 	"reverse-proxy-mac/src/infrastructure/cache"
@@ -69,7 +71,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 	}
 
 	// Get user security context
-	userSecCtx, err := GetUserHTTPSecurityContext(ctx, a.ldapClient, principal, req.HTTPMethod)
+	userSecCtx, err := GetUserHTTPSecurityContext(ctx, a.ldapClient, ticket, req.HTTPMethod)
 	if err != nil {
 		a.logger.Error(ctx, "Failed to GetUserHTTPSecurityContext", map[string]interface{}{
 			"error": err.Error(),
@@ -239,37 +241,48 @@ func (a *HTTPAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {
 	}
 }
 
-func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, httpMethod string) (*auth.UserHTTPSecurityContext, error) {
+func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, userTicket *credentials.Credentials, httpMethod string) (*auth.UserHTTPSecurityContext, error) {
 	if err := validateHTTPMethod(httpMethod); err != nil {
 		return nil, err
 	}
 
-	// Search for user in LDAP
-	userEntries, err := cl.Search(ctx, fmt.Sprintf("(uid=%s)", username), auth.AllMacUserAttributes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search user in LDAP: %w", err)
-	}
-	if len(userEntries) == 0 {
-		return nil, errUserNotFound
-	}
-	if len(userEntries) > 1 {
-		cl.Logger.Warn(ctx, "multiple users found", map[string]interface{}{
-			"count": len(userEntries),
-		})
-	}
-	userEntry := userEntries[0]
+	var macValue, integrityValue string
+	attrs := userTicket.Attributes()
+	macValue, macValueOk := attrs[auth.UserMacAttribute].(string)
+	integrityValue, integrityValueOk := attrs[auth.UserIntegrityLevelAttribute].(string)
+	if !macValueOk || !integrityValueOk {
+		// Search for user in LDAP
+		userEntries, err := cl.Search(ctx, fmt.Sprintf("(uid=%s)", userTicket.CName().PrincipalNameString()), auth.AllMacUserAttributes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to search user in LDAP: %w", err)
+		}
+		if len(userEntries) == 0 {
+			return nil, errUserNotFound
+		}
+		if len(userEntries) > 1 {
+			cl.Logger.Warn(ctx, "multiple users found", map[string]interface{}{
+				"count": len(userEntries),
+			})
+		}
+		userEntry := userEntries[0]
 
-	// Log user attributes for debugging
-	attrs := make(map[string]interface{}, len(userEntry.Attributes))
-	for _, attr := range userEntry.Attributes {
-		attrs[attr.Name] = attr.Values
-	}
-	cl.Logger.Debug(ctx, "user found in LDAP", attrs)
+		// Debug
+		for _, attr := range userEntry.Attributes {
+			cl.Logger.Debug(ctx, "user attribute", map[string]interface{}{
+				"name":  attr.Name,
+				"values": attr.Values,
+			})
+		}
 
-	// Parse MAC label
-	macValue := userEntry.GetAttributeValue(auth.UserMacAttribute)
-	if macValue == "" {
-		return nil, fmt.Errorf("user MAC attribute '%s' is empty or not found", auth.UserMacAttribute)
+		macValue = userEntry.GetAttributeValue(auth.UserMacAttribute)
+		if macValue == "" {
+			return nil, fmt.Errorf("user MAC attribute '%s' is empty or not found", auth.UserMacAttribute)
+		}
+
+		integrityValue = userEntry.GetAttributeValue(auth.UserIntegrityLevelAttribute)
+		if integrityValue == "" {
+			return nil, fmt.Errorf("user integrity categories attribute '%s' is empty or not found", auth.UserIntegrityLevelAttribute)
+		}
 	}
 
 	label, err := parseMacLabel(macValue)
@@ -277,12 +290,7 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, username, 
 		return nil, fmt.Errorf("failed to parse MAC label for user: %w", err)
 	}
 
-	// Parse integrity categories
-	integrity := userEntry.GetAttributeValue(auth.UserIntegrityLevelAttribute)
-	if integrity == "" {
-		return nil, fmt.Errorf("user integrity categories attribute '%s' is empty or not found", auth.UserIntegrityLevelAttribute)
-	}
-	integrityCategories, err := strconv.ParseUint(integrity, 0, 32)
+	integrityCategories, err := strconv.ParseUint(integrityValue, 0, 32)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse integrity categories for user: %w", err)
 	}
@@ -421,7 +429,11 @@ var writeHTTPMethods = map[string]struct{}{
 // Based on Bell-LaPadula model: "no read up, no write down".
 func checkAccessHTTP(userCtx *auth.UserHTTPSecurityContext, resourceCtx auth.SecurityContext) (bool, string) {
 	_, isWriteOperation := writeHTTPMethods[userCtx.RequestMethod]
-	return checkMACAccess(userCtx, resourceCtx, isWriteOperation)
+	accessGranted, msg := checkMACAccess(userCtx, resourceCtx, isWriteOperation)
+	if accessGranted && isWriteOperation {
+		accessGranted, msg = checkIntegrity(userCtx, resourceCtx)
+	}
+	return accessGranted, msg
 }
 
 // extractHostFromRequest extracts the FQDN from the authorization request.

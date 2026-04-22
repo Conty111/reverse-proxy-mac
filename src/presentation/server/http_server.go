@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"reverse-proxy-mac/src/domain/logger"
@@ -68,7 +69,12 @@ func (s *HTTPServer) Start(ctx context.Context) error {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/health/live", s.handleLiveness)
 	mux.HandleFunc("/health/ready", s.handleReadiness)
-	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/metrics", promhttp.InstrumentMetricHandler(
+		prometheus.DefaultRegisterer,
+		promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
+			EnableOpenMetrics: true,
+		}),
+	))
 
 	// Create server with configuration
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
