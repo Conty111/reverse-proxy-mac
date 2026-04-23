@@ -2,9 +2,10 @@
 
 # Variables
 APP_NAME=authserver
+VERSION=v0.0.1
 BINARY_NAME=authserver
 DOCKER_IMAGE=mac-authserver
-DOCKER_COMPOSE=docker-compose
+DOCKER_COMPOSE=docker compose
 GO=go
 GOFLAGS=-v
 BUILD_DIR=./build
@@ -71,7 +72,7 @@ deps:
 # Docker targets
 docker-build:
 	@echo "Building Docker image..."
-	docker build -t $(DOCKER_IMAGE):cache .
+	docker build -t $(DOCKER_IMAGE):$(VERSION) .
 
 docker-up: ## Start services with docker-compose
 	@echo "Starting services..."

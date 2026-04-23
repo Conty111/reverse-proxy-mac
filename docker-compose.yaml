@@ -5,16 +5,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mac-authserver:cache
+    image: mac-authserver:v0.0.1
     container_name: mac-authserver
     hostname: mac-authserver
-    ports:
-      - "9001:9001"
-      - "8000:8080"
     volumes:
       - ./config.json:/app/config.json:ro
-      # - ./mac-authserver.keytab:/etc/mac-authserver.keytab:ro
-      - ./authserver.keytab:/etc/authserver.keytab:ro
+      - ./mac-authserver.keytab:/etc/mac-authserver.keytab:ro
       - ./krb5.conf:/etc/krb5.conf:ro
     environment:
       - CONFIG_PATH=/app/config.json
@@ -25,15 +21,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    # For tests ONLY
-    # (to make reverse dns lookup possible)
-    extra_hosts:
-    # Source
-      - "host-1.ald.company.lan:172.20.0.1"
-    # Destination 
-      - "host-1.ald.company.lan:172.20.0.2"
-      - "host-1.ald.company.lan:172.20.0.3"
-      - "host-1.ald.company.lan:172.20.0.4"
 
   envoy:
     image: envoyproxy/envoy:v1.36.4
@@ -42,10 +29,11 @@ services:
     volumes:
       - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
     ports:
-      - "8080:8080"
-      - "9901:9901"
+      - "80:80"
     command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # Example of how metrics can be pulled and served
   prometheus:
@@ -54,8 +42,6 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
-    ports:
-      - "9090:9090"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -67,13 +53,14 @@ services:
     image: grafana/grafana:11.6.1
     container_name: grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
-      - grafana-data:/var/lib/grafana
+      - ./grafana-data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=AstraLinux123!
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://host-1.ald.company.lan/
     depends_on:
       - prometheus
     restart: unless-stopped
@@ -84,4 +71,3 @@ networks:
 
 volumes:
   prometheus-data:
-  grafana-data:
