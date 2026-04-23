@@ -266,14 +266,6 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, userTicket
 		}
 		userEntry := userEntries[0]
 
-		// Debug
-		for _, attr := range userEntry.Attributes {
-			cl.Logger.Debug(ctx, "user attribute", map[string]interface{}{
-				"name":  attr.Name,
-				"values": attr.Values,
-			})
-		}
-
 		macValue = userEntry.GetAttributeValue(auth.UserMacAttribute)
 		if macValue == "" {
 			return nil, fmt.Errorf("user MAC attribute '%s' is empty or not found", auth.UserMacAttribute)
@@ -281,7 +273,8 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, userTicket
 
 		integrityValue = userEntry.GetAttributeValue(auth.UserIntegrityLevelAttribute)
 		if integrityValue == "" {
-			return nil, fmt.Errorf("user integrity categories attribute '%s' is empty or not found", auth.UserIntegrityLevelAttribute)
+			cl.Logger.Warn(ctx, fmt.Sprintf("user integrity categories attribute '%s' is empty or not found, setting default", auth.UserIntegrityLevelAttribute),  map[string]interface{}{})
+			integrityValue = defaultIntegrityValue
 		}
 	}
 

@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	macLabelParts      = 4
-	maxConfidentiality = 255
+	macLabelParts         = 4
+	maxConfidentiality    = 255
+	defaultIntegrityValue = "0x0"
 )
 
 var (

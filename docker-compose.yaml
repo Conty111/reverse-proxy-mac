@@ -21,6 +21,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - proxy-network
 
   envoy:
     image: envoyproxy/envoy:v1.36.4
@@ -30,10 +32,13 @@ services:
       - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
     ports:
       - "80:80"
-    command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+      # - "9901:9901"
+    command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "debug"]
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - proxy-network
 
   # Example of how metrics can be pulled and served
   prometheus:
@@ -48,6 +53,8 @@ services:
       - "--storage.tsdb.retention.time=15d"
       - "--web.enable-lifecycle"
     restart: unless-stopped
+    networks:
+      - proxy-network
 
   grafana:
     image: grafana/grafana:11.6.1
@@ -64,6 +71,8 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+    networks:
+      - proxy-network
 
 networks:
   proxy-network:

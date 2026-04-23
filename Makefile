@@ -32,7 +32,7 @@ run: ## Run the application locally
 test:
 	@echo "Running tests with Allure..."
 	mkdir -p ./tests/allure-results && rm -rf ./tests/allure-results/*
-	export ALLURE_OUTPUT_PATH=$(PWD)/tests && $(GO) test -cover -coverprofile=./tests/coverage.out -v ./...
+	export ALLURE_OUTPUT_PATH=$(PWD)/tests && $(GO) test -cover -coverprofile=./tests/coverage.out -v ./src/...
 	$(GO) tool cover -html=./tests/coverage.out -o ./tests/coverage.html
 
 allure:
@@ -54,16 +54,16 @@ test-all:
 
 fmt:
 	@echo "Formatting code..."
-	$(GO) fmt ./...
+	$(GO) fmt ./src/...
 
 lint:
 	@echo "Running linter..."
 	@which golangci-lint > /dev/null || (echo "golangci-lint not installed. Install it from https://golangci-lint.run/usage/install/" && exit 1)
-	golangci-lint run ./...
+	golangci-lint run ./src/...
 
 vet:
 	@echo "Running go vet..."
-	$(GO) vet ./...
+	$(GO) vet ./src/...
 
 deps:
 	@echo "Downloading dependencies..."
