@@ -1,4 +1,5 @@
 grafana-data
+docs/latex
 deploy/certs
 
 tests/*

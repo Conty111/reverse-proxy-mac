@@ -34,7 +34,7 @@
 
     ```bash
     ipa permission-add "Read Users Attributes" \
-    --type=service \
+    --type=user \
     --right={read,search,compare} \
     --attrs={cn,uid,x-ald-user-mac,x-ald-user-mic-level}
 

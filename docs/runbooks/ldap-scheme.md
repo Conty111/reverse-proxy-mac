@@ -163,8 +163,8 @@ EOF
 
 ```bash
 ipa permission-add "Read URI MAC rules" \
-  --type=service \
-  --right={read,search,compare} \
-  --attrs={cn,x-ald-uri-mac,x-ald-uri-mic-level,x-ald-uri-path,x-ald-uri-match-type,x-ald-uri-service-ref,x-ald-uri-description} \
-  --bindtype=all
+--filter="(objectclass=aldURIMACRule)" \
+--right={read,search,compare} \
+--attrs={cn,x-ald-uri-mac,x-ald-uri-mic-level,x-ald-uri-path,x-ald-uri-match-type,x-ald-uri-service-ref,x-ald-uri-description} \
+--bindtype=all
 ```
