@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -86,6 +87,11 @@ func (s *Store) current() *snapshot {
 // LookupHost returns the CachedHost for the given FQDN, or nil if not found.
 func (s *Store) LookupHost(fqdn string) *CachedHost {
 	return s.current().hosts.Lookup(fqdn)
+}
+
+// LookupUser returns the CachedUser for the given uid (case-insensitive), or nil if not found.
+func (s *Store) LookupUser(uid string) *CachedUser {
+	return s.current().users[strings.ToLower(uid)]
 }
 
 // MatchingURIRules implements the algorithm from the spec:

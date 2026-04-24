@@ -28,6 +28,15 @@ type CachedURIRule struct {
 	serviceRefs []string
 }
 
+// CachedUser holds the pre-parsed security context of a domain user.
+type CachedUser struct {
+	ConfidentialityMin  uint8
+	CategoriesMin       uint64
+	ConfidentialityMax  uint8
+	CategoriesMax       uint64
+	IntegrityCategories uint32
+}
+
 // snapshot is an immutable, fully-built cache state swapped in atomically.
 type snapshot struct {
 	hosts   *HostTrie
@@ -36,6 +45,8 @@ type snapshot struct {
 	regexRules []*CachedURIRule
 	// allRules is the flat slice indexed by RuleID, used for O(1) rule lookup.
 	allRules []*CachedURIRule
+	// users maps lowercase uid → CachedUser for all domain users with MAC labels.
+	users map[string]*CachedUser
 }
 
 // parseMacLabel parses "confMin:catsMin:confMax:catsMax" (hex or decimal).
@@ -247,11 +258,67 @@ func loadSnapshot(ctx context.Context, cl *ldapclient.Client, log logger.Logger)
 		"total": len(hostEntries),
 	})
 
+	// ------------------------------------------------------------------ Users
+	userEntries, err := cl.Search(ctx, fmt.Sprintf("(%s=*)", auth.UserMacAttribute), auth.AllMacUserAttributes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search users: %w", err)
+	}
+
+	users := make(map[string]*CachedUser, len(userEntries))
+
+	for _, entry := range userEntries {
+		uid := entry.GetAttributeValue("uid")
+		if uid == "" {
+			continue
+		}
+
+		macValue := entry.GetAttributeValue(auth.UserMacAttribute)
+		if macValue == "" {
+			continue
+		}
+
+		confMin, confMax, catsMin, catsMax, err := parseMacLabel(macValue)
+		if err != nil {
+			log.Warn(ctx, "cache loader: skipping user with invalid MAC label", map[string]interface{}{
+				"uid":   uid,
+				"error": err.Error(),
+			})
+			continue
+		}
+
+		var integrityCategories uint32
+		micValue := entry.GetAttributeValue(auth.UserIntegrityLevelAttribute)
+		if micValue != "" {
+			parsed, err := strconv.ParseUint(micValue, 0, 32)
+			if err != nil {
+				log.Warn(ctx, "cache loader: skipping user with invalid integrity categories", map[string]interface{}{
+					"uid":   uid,
+					"error": err.Error(),
+				})
+				continue
+			}
+			integrityCategories = uint32(parsed)
+		}
+
+		users[strings.ToLower(uid)] = &CachedUser{
+			ConfidentialityMin:  confMin,
+			CategoriesMin:       catsMin,
+			ConfidentialityMax:  confMax,
+			CategoriesMax:       catsMax,
+			IntegrityCategories: integrityCategories,
+		}
+	}
+
+	log.Info(ctx, "cache loader: users loaded", map[string]interface{}{
+		"total": len(users),
+	})
+
 	return &snapshot{
 		hosts:      hostTrie,
 		uriTrie:    uriTrie,
 		regexRules: regexRules,
 		allRules:   allRules,
+		users:      users,
 	}, nil
 }
 

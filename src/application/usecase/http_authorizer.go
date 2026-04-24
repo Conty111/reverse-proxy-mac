@@ -70,8 +70,8 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		"X-Auth-Realm":         realm,
 	}
 
-	// Get user security context
-	userSecCtx, err := GetUserHTTPSecurityContext(ctx, a.ldapClient, ticket, req.HTTPMethod)
+	// Get user security context (cache-first)
+	userSecCtx, err := GetUserHTTPSecurityContext(ctx, a.ldapClient, a.cache, ticket, req.HTTPMethod)
 	if err != nil {
 		a.logger.Error(ctx, "Failed to GetUserHTTPSecurityContext", map[string]interface{}{
 			"error": err.Error(),
@@ -236,18 +236,35 @@ func (a *HTTPAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {
 	)
 }
 
-func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, userTicket *credentials.Credentials, httpMethod string) (*auth.UserHTTPSecurityContext, error) {
+func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, store *cache.Store, userTicket *credentials.Credentials, httpMethod string) (*auth.UserHTTPSecurityContext, error) {
 	if err := validateHTTPMethod(httpMethod); err != nil {
 		return nil, err
 	}
 
+	uid := userTicket.CName().PrincipalNameString()
+
+	// Fast path: cache hit.
+	if store != nil {
+		if cached := store.LookupUser(uid); cached != nil {
+			return &auth.UserHTTPSecurityContext{
+				RequestMethod:       httpMethod,
+				ConfidentialityMin:  cached.ConfidentialityMin,
+				CategoriesMin:       cached.CategoriesMin,
+				ConfidentialityMax:  cached.ConfidentialityMax,
+				CategoriesMax:       cached.CategoriesMax,
+				IntegrityCategories: cached.IntegrityCategories,
+			}, nil
+		}
+	}
+
+	// Slow path: try Kerberos ticket attributes first, then LDAP.
 	var macValue, integrityValue string
 	attrs := userTicket.Attributes()
 	macValue, macValueOk := attrs[auth.UserMacAttribute].(string)
 	integrityValue, integrityValueOk := attrs[auth.UserIntegrityLevelAttribute].(string)
 	if !macValueOk || !integrityValueOk {
 		// Search for user in LDAP
-		userEntries, err := cl.Search(ctx, fmt.Sprintf("(uid=%s)", userTicket.CName().PrincipalNameString()), auth.AllMacUserAttributes)
+		userEntries, err := cl.Search(ctx, fmt.Sprintf("(uid=%s)", uid), auth.AllMacUserAttributes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search user in LDAP: %w", err)
 		}

@@ -7,6 +7,7 @@ const (
 
 // https://www.aldpro.ru/professional/ALD_Pro_Module_13/ALD_Pro_mac_mic.html#freeipa
 var AllMacUserAttributes []string = []string{
+	"uid",
 	UserMacAttribute,
 	UserIntegrityLevelAttribute,
 }

@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mac-authserver:v0.0.1
+    image: mac-authserver:v0.0.2
     container_name: mac-authserver
     hostname: mac-authserver
     volumes:

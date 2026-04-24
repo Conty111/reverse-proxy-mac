@@ -47,12 +47,14 @@ https://www.envoyproxy.io/
 | `uriTrie` | [`*URITrie`](../src/infrastructure/cache/uri_trie.go:31) | Trie-дерево по сегментам URI-пути. Хранит правила типов `exact` и `prefix`. Поиск за O(количество сегментов пути). |
 | `regexRules` | `[]*CachedURIRule` | Плоский список URI-правил с типом `regex`. Проверяются линейно, но только для правил, привязанных к запрашиваемому хосту (фильтрация через bitset). |
 | `allRules` | `[]*CachedURIRule` | Плоский массив всех URI-правил, индексированный по `RuleID`. Обеспечивает O(1) доступ к правилу по идентификатору. |
+| `users` | `map[string]*CachedUser` | Хэш-таблица пользователей домена, ключ — lowercase `uid`. Хранит предварительно распарсенные метки безопасности (`ConfidentialityMin/Max`, `CategoriesMin/Max`, `IntegrityCategories`). Поиск за O(1). |
 
 **Источники данных (LDAP):**
 
-При загрузке snapshot выполняются два LDAP-запроса:
+При загрузке snapshot выполняются три LDAP-запроса:
 1. **URI MAC-правила** — `(objectClass=aldURIMACRule)` — загружаются все правила с атрибутами: путь (`x-ald-uri-path`), тип совпадения (`x-ald-uri-match-type`), метка MAC (`x-ald-uri-mac`), категории целостности (`x-ald-uri-mic-level`), привязки к сервисам (`x-ald-uri-service-ref`).
 2. **Хосты** — `(x-ald-host-mac=*)` — загружаются все хосты с MAC-метками и категориями целостности (`x-ald-host-mic-level`).
+3. **Пользователи** — `(x-ald-user-mac=*)` — загружаются все пользователи домена с MAC-метками (`x-ald-user-mac`) и категориями целостности (`x-ald-user-mic-level`).
 
 **Алгоритм поиска URI-правил ([`MatchingURIRules()`](../src/infrastructure/cache/store.go:102)):**
 
@@ -65,7 +67,9 @@ https://www.envoyproxy.io/
 
 **Fallback на LDAP:**
 
-Если хост не найден в кэше, [`GetHostSecurityContext()`](../src/application/usecase/common.go:78) выполняет прямой LDAP-запрос как fallback. Это обеспечивает корректную работу для хостов, добавленных между обновлениями кэша.
+Если объект не найден в кэше, выполняется прямой LDAP-запрос как fallback. Это обеспечивает корректную работу для объектов, добавленных между обновлениями кэша:
+- **Хосты** — [`GetHostSecurityContext()`](../src/application/usecase/common.go:78) ищет хост по FQDN.
+- **Пользователи** — [`GetUserHTTPSecurityContext()`](../src/application/usecase/http_authorizer.go:239) сначала проверяет кэш по `uid`, затем атрибуты Kerberos-тикета, и только потом обращается к LDAP.
 
 Логика авторизации происходит по мандатной модели управления доступом (см. [подробнее про авторизацию](./access.md)).
 
