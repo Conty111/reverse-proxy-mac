@@ -44,12 +44,11 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 			"source_ip": req.SourceIP,
 			"error":     err.Error(),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        fmt.Sprintf("Failed to resolve source IP %s to FQDN: %s", req.SourceIP, err.Error()),
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - Source host resolution failed",
-		}, nil
+		return auth.NewDeniedAuthResponse(
+			403,
+			auth.DenyReasonTransportResolution,
+			fmt.Sprintf("Failed to resolve source IP %s to FQDN: %s", req.SourceIP, err.Error()),
+		), nil
 	}
 
 	// Resolve destination IP to FQDN
@@ -59,12 +58,11 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 			"dest_ip": req.DestIP,
 			"error":   err.Error(),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        fmt.Sprintf("Failed to resolve destination IP %s to FQDN: %s", req.DestIP, err.Error()),
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - Destination host resolution failed",
-		}, nil
+		return auth.NewDeniedAuthResponse(
+			403,
+			auth.DenyReasonTransportResolution,
+			fmt.Sprintf("Failed to resolve destination IP %s to FQDN: %s", req.DestIP, err.Error()),
+		), nil
 	}
 
 	a.logger.Info(ctx, "Resolved IPs to FQDNs", map[string]interface{}{
@@ -81,12 +79,11 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 			"fqdn":  sourceFQDN,
 			"error": err.Error(),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        fmt.Sprintf("Failed to retrieve source host security context: %s", err.Error()),
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - MAC context unavailable",
-		}, nil
+		return auth.NewDeniedAuthResponse(
+			403,
+			auth.DenyReasonTransportHostContext,
+			fmt.Sprintf("Failed to retrieve source host security context: %s", err.Error()),
+		), nil
 	}
 
 	a.logger.Debug(ctx, "Source host security context retrieved", map[string]interface{}{
@@ -105,12 +102,11 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 			"fqdn":  destFQDN,
 			"error": err.Error(),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        fmt.Sprintf("Failed to retrieve destination host security context: %s", err.Error()),
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - MAC context unavailable",
-		}, nil
+		return auth.NewDeniedAuthResponse(
+			403,
+			auth.DenyReasonTransportHostContext,
+			fmt.Sprintf("Failed to retrieve destination host security context: %s", err.Error()),
+		), nil
 	}
 
 	a.logger.Debug(ctx, "Destination host security context retrieved", map[string]interface{}{
@@ -124,25 +120,24 @@ func (a *TransportAuthorizer) Authorize(ctx context.Context, req *auth.AuthReque
 
 	// Perform MAC authorization check (host-to-host)
 	// For transport layer, we treat all connections as read operations
-	allowed, reason := checkMACAccess(sourceSecCtx, destSecCtx, false)
-	if !allowed {
+	result := checkMACAccess(sourceSecCtx, destSecCtx, false,
+		auth.DenyReasonTransportConfidentiality,
+		auth.DenyReasonTransportCategories,
+	)
+	if !result.Allowed {
 		a.logger.Warn(ctx, "MAC authorization denied", map[string]interface{}{
 			"source_fqdn": sourceFQDN,
 			"dest_fqdn":   destFQDN,
-			"reason":      reason,
+			"reason":      result.Message,
+			"deny_reason": string(result.DenyReason),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        reason,
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - MAC policy violation",
-		}, nil
+		return auth.NewDeniedAuthResponse(403, result.DenyReason, result.Message), nil
 	}
 
 	a.logger.Info(ctx, "MAC authorization granted", map[string]interface{}{
 		"source_fqdn": sourceFQDN,
 		"dest_fqdn":   destFQDN,
-		"reason":      reason,
+		"reason":      result.Message,
 	})
 
 	return &auth.AuthResponse{

@@ -72,7 +72,12 @@ func (s *AuthServiceV3) handleTransportCheck(ctx context.Context, req *envoy_aut
 	authResp, err := s.transportAuthorizer.Authorize(ctx, authReq)
 	if err != nil {
 		s.logger.Error(ctx, "Transport authorization failed", map[string]interface{}{"error": err.Error()})
-		return s.createDeniedResponse(codes.Internal, "Internal transport authorization error"), nil
+		dr := &auth.DenyResponse{
+			Status:  500,
+			Reason:  auth.DenyReasonInternal,
+			Message: "Internal transport authorization error",
+		}
+		return s.createDeniedResponse(codes.Internal, dr.ToJSON()), nil
 	}
 
 	return s.convertToEnvoyResponse(authResp), nil
@@ -85,7 +90,12 @@ func (s *AuthServiceV3) handleHTTPCheck(ctx context.Context, req *envoy_auth.Che
 	authResp, err := s.httpAuthorizer.Authorize(ctx, authReq)
 	if err != nil {
 		s.logger.Error(ctx, "HTTP authorization failed", map[string]interface{}{"error": err.Error()})
-		return s.createDeniedResponse(codes.Internal, "Internal authorization error"), nil
+		dr := &auth.DenyResponse{
+			Status:  500,
+			Reason:  auth.DenyReasonInternal,
+			Message: "Internal authorization error",
+		}
+		return s.createDeniedResponse(codes.Internal, dr.ToJSON()), nil
 	}
 
 	return s.convertToEnvoyResponse(authResp), nil
@@ -183,36 +193,58 @@ func (s *AuthServiceV3) convertToEnvoyResponse(authResp *auth.AuthResponse) *env
 		}
 	}
 
+	// Determine the response body: prefer the structured JSON DeniedBody,
+	// fall back to DeniedMessage for backward compatibility.
+	body := authResp.DeniedBody
+	if body == "" {
+		body = authResp.DeniedMessage
+	}
+
 	// Handle different types of denied responses
 	switch authResp.DeniedStatus {
 	case 302:
-		return s.createRedirectResponse(authResp.Headers["Location"], authResp.DeniedMessage)
+		return s.createRedirectResponse(authResp.Headers["Location"], body)
 	case 401:
-		return s.createUnauthorizedResponse(authResp.DeniedMessage, authResp.Headers)
+		return s.createUnauthorizedResponse(body, authResp.Headers)
 	default:
-		return s.createDeniedResponse(codes.PermissionDenied, authResp.DeniedMessage)
+		return s.createDeniedResponse(codes.PermissionDenied, body)
 	}
 }
 
-func (s *AuthServiceV3) createDeniedResponse(code codes.Code, message string) *envoy_auth.CheckResponse {
+func (s *AuthServiceV3) createDeniedResponse(code codes.Code, body string) *envoy_auth.CheckResponse {
 	return &envoy_auth.CheckResponse{
 		Status: &status.Status{
 			Code:    int32(code),
-			Message: message,
+			Message: body,
 		},
 		HttpResponse: &envoy_auth.CheckResponse_DeniedResponse{
 			DeniedResponse: &envoy_auth.DeniedHttpResponse{
 				Status: &envoy_type.HttpStatus{
 					Code: envoy_type.StatusCode_Forbidden,
 				},
-				Body: message,
+				Headers: []*envoy_core.HeaderValueOption{
+					{
+						Header: &envoy_core.HeaderValue{
+							Key:   "Content-Type",
+							Value: "application/json",
+						},
+					},
+				},
+				Body: body,
 			},
 		},
 	}
 }
 
-func (s *AuthServiceV3) createUnauthorizedResponse(message string, headers map[string]string) *envoy_auth.CheckResponse {
-	var headerOptions []*envoy_core.HeaderValueOption
+func (s *AuthServiceV3) createUnauthorizedResponse(body string, headers map[string]string) *envoy_auth.CheckResponse {
+	headerOptions := []*envoy_core.HeaderValueOption{
+		{
+			Header: &envoy_core.HeaderValue{
+				Key:   "Content-Type",
+				Value: "application/json",
+			},
+		},
+	}
 	for k, v := range headers {
 		headerOptions = append(headerOptions, &envoy_core.HeaderValueOption{
 			Header: &envoy_core.HeaderValue{
@@ -225,7 +257,7 @@ func (s *AuthServiceV3) createUnauthorizedResponse(message string, headers map[s
 	return &envoy_auth.CheckResponse{
 		Status: &status.Status{
 			Code:    int32(codes.Unauthenticated),
-			Message: message,
+			Message: body,
 		},
 		HttpResponse: &envoy_auth.CheckResponse_DeniedResponse{
 			DeniedResponse: &envoy_auth.DeniedHttpResponse{
@@ -233,13 +265,13 @@ func (s *AuthServiceV3) createUnauthorizedResponse(message string, headers map[s
 					Code: envoy_type.StatusCode_Unauthorized,
 				},
 				Headers: headerOptions,
-				Body:    message,
+				Body:    body,
 			},
 		},
 	}
 }
 
-func (s *AuthServiceV3) createRedirectResponse(location string, message string) *envoy_auth.CheckResponse {
+func (s *AuthServiceV3) createRedirectResponse(location string, body string) *envoy_auth.CheckResponse {
 	headers := []*envoy_core.HeaderValueOption{
 		{
 			Header: &envoy_core.HeaderValue{
@@ -252,7 +284,7 @@ func (s *AuthServiceV3) createRedirectResponse(location string, message string) 
 	return &envoy_auth.CheckResponse{
 		Status: &status.Status{
 			Code:    int32(codes.Unauthenticated),
-			Message: message,
+			Message: body,
 		},
 		HttpResponse: &envoy_auth.CheckResponse_DeniedResponse{
 			DeniedResponse: &envoy_auth.DeniedHttpResponse{
@@ -260,7 +292,7 @@ func (s *AuthServiceV3) createRedirectResponse(location string, message string) 
 					Code: envoy_type.StatusCode_Found,
 				},
 				Headers: headers,
-				Body:    message,
+				Body:    body,
 			},
 		},
 	}

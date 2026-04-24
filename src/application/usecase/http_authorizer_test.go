@@ -62,8 +62,11 @@ func (s *HTTPAuthorizerSuite) TestMissingAuthorizationHeader(t provider.T) {
 				t.WithNewStep("Verify response", func(sCtx provider.StepCtx) {
 					sCtx.Assert().Equal(auth.DecisionDeny, resp.Decision)
 					sCtx.Assert().Equal(int32(401), resp.DeniedStatus)
-					sCtx.Assert().Equal("Unauthorized", resp.DeniedMessage)
+					sCtx.Assert().Equal("Kerberos authentication required", resp.DeniedMessage)
 					sCtx.Assert().Equal("Kerberos authentication required", resp.Reason)
+					sCtx.Assert().Equal(auth.DenyReasonAuthentication, resp.DenyReason)
+					sCtx.Assert().NotEmpty(resp.DeniedBody)
+					sCtx.Assert().Contains(resp.DeniedBody, `"reason":"AUTHENTICATION_REQUIRED"`)
 					sCtx.Assert().Contains(resp.Headers, "WWW-Authenticate")
 					sCtx.Assert().Equal("Negotiate", resp.Headers["WWW-Authenticate"])
 				})
@@ -267,8 +270,12 @@ func (s *HTTPAuthorizerSuite) TestCreateUnauthorizedResponse(t provider.T) {
 
 	t.Assert().Equal(auth.DecisionDeny, resp.Decision)
 	t.Assert().Equal(int32(401), resp.DeniedStatus)
-	t.Assert().Equal("Unauthorized", resp.DeniedMessage)
+	t.Assert().Equal("Kerberos authentication required", resp.DeniedMessage)
 	t.Assert().Equal("Kerberos authentication required", resp.Reason)
+	t.Assert().Equal(auth.DenyReasonAuthentication, resp.DenyReason)
+	t.Assert().NotEmpty(resp.DeniedBody)
+	t.Assert().Contains(resp.DeniedBody, `"reason":"AUTHENTICATION_REQUIRED"`)
+	t.Assert().Contains(resp.DeniedBody, `"status":401`)
 	t.Assert().Contains(resp.Headers, "WWW-Authenticate")
 	t.Assert().Equal("Negotiate", resp.Headers["WWW-Authenticate"])
 }

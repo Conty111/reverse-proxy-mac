@@ -130,7 +130,19 @@ func GetHostSecurityContext(ctx context.Context, cl *ldap.Client, store *cache.S
 	}, nil
 }
 
-func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool) (bool, string) {
+// MACCheckResult holds the outcome of a MAC access check including the
+// machine-readable deny reason when access is denied.
+type MACCheckResult struct {
+	Allowed    bool
+	Message    string
+	DenyReason auth.DenyReason
+}
+
+// checkMACAccess performs the confidentiality and categories check.
+// The returned MACCheckResult.DenyReason uses the provided confidentiality and
+// categories deny reasons so callers can distinguish host-level vs URI-level
+// vs transport-level denials.
+func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool, confDenyReason, catsDenyReason auth.DenyReason) MACCheckResult {
 	// Get security context values
 	objectConfMin := object.GetConfidentialityMin()
 	objectConfMax := object.GetConfidentialityMax()
@@ -145,40 +157,69 @@ func checkMACAccess(subject, object auth.SecurityContext, isWriteOperation bool)
 	if isWriteOperation {
 		// Write operations: exact match required for confidentiality and categories
 		if subjectConfMin != objectConfMin || subjectConfMax != objectConfMax {
-			return false, fmt.Sprintf("MAC: write operation denied - user confidentiality range [%d, %d] != object range [%d, %d]",
-				subjectConfMin, subjectConfMax, objectConfMin, objectConfMax)
+			return MACCheckResult{
+				Allowed: false,
+				Message: fmt.Sprintf("MAC: write operation denied - user confidentiality range [%d, %d] != object range [%d, %d]",
+					subjectConfMin, subjectConfMax, objectConfMin, objectConfMax),
+				DenyReason: confDenyReason,
+			}
 		}
 		if subjectCatsMin != objectCatsMin {
-			return false, fmt.Sprintf("MAC: write operation denied - user categories min 0x%x != object categories min 0x%x",
-				subjectCatsMin, objectCatsMin)
+			return MACCheckResult{
+				Allowed: false,
+				Message: fmt.Sprintf("MAC: write operation denied - user categories min 0x%x != object categories min 0x%x",
+					subjectCatsMin, objectCatsMin),
+				DenyReason: catsDenyReason,
+			}
 		}
 	} else {
 		// Read operations: ranges must overlap
 		// object.ConfMin <= user.ConfMax AND user.ConfMin <= object.ConfMax
 		if objectConfMin > subjectConfMax || subjectConfMin > objectConfMax {
-			return false, fmt.Sprintf("MAC: read operation denied - user confidentiality range [%d, %d] does not overlap with object range [%d, %d]",
-				subjectConfMin, subjectConfMax, objectConfMin, objectConfMax)
+			return MACCheckResult{
+				Allowed: false,
+				Message: fmt.Sprintf("MAC: read operation denied - user confidentiality range [%d, %d] does not overlap with object range [%d, %d]",
+					subjectConfMin, subjectConfMax, objectConfMin, objectConfMax),
+				DenyReason: confDenyReason,
+			}
 		}
 
 		// User must have all categories that the object requires (min categories)
 		// (user.CategoriesMax & object.CategoriesMin) == object.CategoriesMin
 		if (subjectCatsMax & objectCatsMin) != objectCatsMin {
-			return false, fmt.Sprintf("MAC: read operation denied - user categories max 0x%x do not include all required object categories min 0x%x",
-				subjectCatsMax, objectCatsMin)
+			return MACCheckResult{
+				Allowed: false,
+				Message: fmt.Sprintf("MAC: read operation denied - user categories max 0x%x do not include all required object categories min 0x%x",
+					subjectCatsMax, objectCatsMin),
+				DenyReason: catsDenyReason,
+			}
 		}
 	}
 
-	return true, "MAC: access granted"
+	return MACCheckResult{
+		Allowed:    true,
+		Message:    "MAC: access granted",
+		DenyReason: auth.DenyReasonNone,
+	}
 }
 
-func checkIntegrity(subject, object auth.SecurityContext) (bool, string) {
-	// Check integrity categories
-	// User's integrity categories must include all bits of object's integrity categories
+// checkIntegrity verifies that the subject's integrity categories include all
+// bits required by the object. The integrityDenyReason parameter lets callers
+// distinguish host-level vs URI-level vs transport-level integrity denials.
+func checkIntegrity(subject, object auth.SecurityContext, integrityDenyReason auth.DenyReason) MACCheckResult {
 	subjectIntegrityCategories := subject.GetIntegrityCategories()
 	objectIntegrityCategories := object.GetIntegrityCategories()
 	if (subjectIntegrityCategories & objectIntegrityCategories) != objectIntegrityCategories {
-		return false, fmt.Sprintf("integrity: access denied - user integrity categories 0x%x do not include all required object integrity categories 0x%x",
-			subjectIntegrityCategories, objectIntegrityCategories)
+		return MACCheckResult{
+			Allowed: false,
+			Message: fmt.Sprintf("integrity: access denied - user integrity categories 0x%x do not include all required object integrity categories 0x%x",
+				subjectIntegrityCategories, objectIntegrityCategories),
+			DenyReason: integrityDenyReason,
+		}
 	}
-	return true, "integrity: access granted"
+	return MACCheckResult{
+		Allowed:    true,
+		Message:    "integrity: access granted",
+		DenyReason: auth.DenyReasonNone,
+	}
 }

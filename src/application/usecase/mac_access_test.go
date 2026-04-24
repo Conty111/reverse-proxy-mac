@@ -46,10 +46,15 @@ func (s *MACAccessSuite) TestMACAuthorizationDeniedReadOperation(t provider.T) {
 		IntegrityCategories: 0,
 	}
 
-	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
+	result := checkAccessHTTP(userCtx, hostCtx,
+		auth.DenyReasonHostConfidentiality,
+		auth.DenyReasonHostCategories,
+		auth.DenyReasonHostIntegrity,
+	)
 
-	t.Assert().False(allowed)
-	t.Assert().Contains(reason, "does not overlap")
+	t.Assert().False(result.Allowed)
+	t.Assert().Contains(result.Message, "does not overlap")
+	t.Assert().Equal(auth.DenyReasonHostConfidentiality, result.DenyReason)
 }
 
 // TestMACAuthorizationDeniedWriteOperation tests MAC denial for write operations
@@ -76,10 +81,15 @@ func (s *MACAccessSuite) TestMACAuthorizationDeniedWriteOperation(t provider.T) 
 		IntegrityCategories: 0,
 	}
 
-	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
+	result := checkAccessHTTP(userCtx, hostCtx,
+		auth.DenyReasonHostConfidentiality,
+		auth.DenyReasonHostCategories,
+		auth.DenyReasonHostIntegrity,
+	)
 
-	t.Assert().False(allowed)
-	t.Assert().Contains(reason, "write operation denied")
+	t.Assert().False(result.Allowed)
+	t.Assert().Contains(result.Message, "write operation denied")
+	t.Assert().Equal(auth.DenyReasonHostConfidentiality, result.DenyReason)
 }
 
 // TestMACAuthorizationDeniedCategories tests MAC denial due to missing categories
@@ -106,10 +116,15 @@ func (s *MACAccessSuite) TestMACAuthorizationDeniedCategories(t provider.T) {
 		IntegrityCategories: 0,
 	}
 
-	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
+	result := checkAccessHTTP(userCtx, hostCtx,
+		auth.DenyReasonHostConfidentiality,
+		auth.DenyReasonHostCategories,
+		auth.DenyReasonHostIntegrity,
+	)
 
-	t.Assert().False(allowed)
-	t.Assert().Contains(reason, "categories")
+	t.Assert().False(result.Allowed)
+	t.Assert().Contains(result.Message, "categories")
+	t.Assert().Equal(auth.DenyReasonHostCategories, result.DenyReason)
 }
 
 // TestMACAuthorizationDeniedIntegrity tests MAC denial due to insufficient integrity level
@@ -120,7 +135,7 @@ func (s *MACAccessSuite) TestMACAuthorizationDeniedIntegrity(t provider.T) {
 	t.Severity(allure.BLOCKER)
 
 	userCtx := &auth.UserHTTPSecurityContext{
-		RequestMethod:       "GET",
+		RequestMethod:       "POST", // Write operation — integrity is checked for writes
 		ConfidentialityMin:  2,
 		ConfidentialityMax:  2,
 		CategoriesMin:       0xFF,
@@ -131,15 +146,20 @@ func (s *MACAccessSuite) TestMACAuthorizationDeniedIntegrity(t provider.T) {
 	hostCtx := &auth.HostSecurityContext{
 		ConfidentialityMin:  2,
 		ConfidentialityMax:  2,
-		CategoriesMin:       0,
-		CategoriesMax:       0,
+		CategoriesMin:       0xFF,
+		CategoriesMax:       0xFF,
 		IntegrityCategories: 0xFF, // High integrity required
 	}
 
-	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
+	result := checkAccessHTTP(userCtx, hostCtx,
+		auth.DenyReasonHostConfidentiality,
+		auth.DenyReasonHostCategories,
+		auth.DenyReasonHostIntegrity,
+	)
 
-	t.Assert().False(allowed)
-	t.Assert().Contains(reason, "integrity")
+	t.Assert().False(result.Allowed)
+	t.Assert().Contains(result.Message, "integrity")
+	t.Assert().Equal(auth.DenyReasonHostIntegrity, result.DenyReason)
 }
 
 // TestSuccessfulMACAuthorizationReadOperation tests successful MAC authorization for read operations
@@ -166,10 +186,15 @@ func (s *MACAccessSuite) TestSuccessfulMACAuthorizationReadOperation(t provider.
 		IntegrityCategories: 0x0F,
 	}
 
-	allowed, reason := checkAccessHTTP(userCtx, hostCtx)
+	result := checkAccessHTTP(userCtx, hostCtx,
+		auth.DenyReasonHostConfidentiality,
+		auth.DenyReasonHostCategories,
+		auth.DenyReasonHostIntegrity,
+	)
 
-	t.Assert().True(allowed)
-	t.Assert().Contains(reason, "access granted")
+	t.Assert().True(result.Allowed)
+	t.Assert().Contains(result.Message, "access granted")
+	t.Assert().Equal(auth.DenyReasonNone, result.DenyReason)
 }
 
 // TestSuccessfulMACAuthorizationWriteOperation tests successful MAC authorization for write operations
@@ -200,10 +225,14 @@ func (s *MACAccessSuite) TestSuccessfulMACAuthorizationWriteOperation(t provider
 				IntegrityCategories: 0x0F,
 			}
 
-			allowed, reason := checkAccessHTTP(userCtx, hostCtx)
+			result := checkAccessHTTP(userCtx, hostCtx,
+				auth.DenyReasonHostConfidentiality,
+				auth.DenyReasonHostCategories,
+				auth.DenyReasonHostIntegrity,
+			)
 
-			sCtx.Assert().True(allowed)
-			sCtx.Assert().Contains(reason, "access granted")
+			sCtx.Assert().True(result.Allowed)
+			sCtx.Assert().Contains(result.Message, "access granted")
 		})
 	}
 }
@@ -233,8 +262,11 @@ func (s *MACAccessSuite) TestCheckMACAccessEdgeCases(t provider.T) {
 			IntegrityCategories: 0,
 		}
 
-		allowed, _ := checkMACAccess(userCtx, hostCtx, false)
-		sCtx.Assert().True(allowed)
+		result := checkMACAccess(userCtx, hostCtx, false,
+			auth.DenyReasonHostConfidentiality,
+			auth.DenyReasonHostCategories,
+		)
+		sCtx.Assert().True(result.Allowed)
 	})
 
 	t.WithNewStep("Test max values - should allow", func(sCtx provider.StepCtx) {
@@ -255,9 +287,63 @@ func (s *MACAccessSuite) TestCheckMACAccessEdgeCases(t provider.T) {
 			IntegrityCategories: 0xFFFFFFFF,
 		}
 
-		allowed, _ := checkMACAccess(userCtx, hostCtx, false)
-		sCtx.Assert().True(allowed)
+		result := checkMACAccess(userCtx, hostCtx, false,
+			auth.DenyReasonHostConfidentiality,
+			auth.DenyReasonHostCategories,
+		)
+		sCtx.Assert().True(result.Allowed)
 	})
+}
+
+// TestDenyReasonForURILevel verifies that URI-level deny reasons are correctly
+// propagated when using URI deny reason constants.
+func (s *MACAccessSuite) TestDenyReasonForURILevel(t provider.T) {
+	t.Title("DenyReason - URI-level violations produce URI-specific reasons")
+	t.Description("Should return URI-specific deny reasons when URI deny reason constants are passed")
+	t.Tags("authorization", "mac", "deny-reason", "uri")
+	t.Severity(allure.NORMAL)
+
+	userCtx := &auth.UserHTTPSecurityContext{
+		RequestMethod:       "GET",
+		ConfidentialityMin:  1,
+		ConfidentialityMax:  1,
+		CategoriesMin:       0xFF,
+		CategoriesMax:       0xFF,
+		IntegrityCategories: 0xFF,
+	}
+
+	uriCtx := &auth.URISecurityContext{
+		Path:                "/secret",
+		ConfidentialityMin:  3,
+		ConfidentialityMax:  3,
+		CategoriesMin:       0,
+		CategoriesMax:       0,
+		IntegrityCategories: 0,
+	}
+
+	result := checkAccessHTTP(userCtx, uriCtx,
+		auth.DenyReasonURIConfidentiality,
+		auth.DenyReasonURICategories,
+		auth.DenyReasonURIIntegrity,
+	)
+
+	t.Assert().False(result.Allowed)
+	t.Assert().Equal(auth.DenyReasonURIConfidentiality, result.DenyReason)
+}
+
+// TestDenyResponseJSON verifies that DenyResponse serializes correctly.
+func (s *MACAccessSuite) TestDenyResponseJSON(t provider.T) {
+	t.Title("DenyResponse JSON serialization")
+	t.Description("Should produce valid JSON with status, reason, and message fields")
+	t.Tags("deny-response", "json")
+	t.Severity(allure.NORMAL)
+
+	resp := auth.NewDeniedAuthResponse(403, auth.DenyReasonHostConfidentiality, "test message")
+
+	t.Assert().NotEmpty(resp.DeniedBody)
+	t.Assert().Contains(resp.DeniedBody, `"status":403`)
+	t.Assert().Contains(resp.DeniedBody, `"reason":"HOST_CONFIDENTIALITY_VIOLATION"`)
+	t.Assert().Contains(resp.DeniedBody, `"message":"test message"`)
 }
 
 func TestMACAccessSuiteRunner(t *testing.T) {

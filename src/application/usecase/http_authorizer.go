@@ -76,12 +76,11 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		a.logger.Error(ctx, "Failed to GetUserHTTPSecurityContext", map[string]interface{}{
 			"error": err.Error(),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        fmt.Sprintf("Failed to retrieve user security context: %s", err.Error()),
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - MAC context unavailable",
-		}, nil
+		return auth.NewDeniedAuthResponse(
+			403,
+			auth.DenyReasonUserContext,
+			fmt.Sprintf("Failed to retrieve user security context: %s", err.Error()),
+		), nil
 	}
 
 	a.logger.Debug(ctx, "User security context retrieved", map[string]interface{}{
@@ -99,12 +98,11 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 		a.logger.Warn(ctx, "Failed to extract host FQDN from the request", map[string]interface{}{
 			"error": err.Error(),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        fmt.Sprintf("Failed to extract host FQDN from the request: %s", err.Error()),
-			DeniedStatus:  400,
-			DeniedMessage: "Bad Request - Invalid Host header",
-		}, nil
+		return auth.NewDeniedAuthResponse(
+			400,
+			auth.DenyReasonBadRequest,
+			fmt.Sprintf("Failed to extract host FQDN from the request: %s", err.Error()),
+		), nil
 	}
 
 	// Get host security context (cache-first)
@@ -114,12 +112,11 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 			"fqdn":  hostFQDN,
 			"error": err.Error(),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        fmt.Sprintf("Failed to retrieve host security context: %s", err.Error()),
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - MAC context unavailable",
-		}, nil
+		return auth.NewDeniedAuthResponse(
+			403,
+			auth.DenyReasonHostContext,
+			fmt.Sprintf("Failed to retrieve host security context: %s", err.Error()),
+		), nil
 	}
 
 	a.logger.Debug(ctx, "Host security context retrieved", map[string]interface{}{
@@ -132,25 +129,25 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 	})
 
 	// Perform host-level MAC authorization check
-	allowed, reason := checkAccessHTTP(userSecCtx, hostSecCtx)
-	if !allowed {
+	result := checkAccessHTTP(userSecCtx, hostSecCtx,
+		auth.DenyReasonHostConfidentiality,
+		auth.DenyReasonHostCategories,
+		auth.DenyReasonHostIntegrity,
+	)
+	if !result.Allowed {
 		a.logger.Warn(ctx, "Host-level MAC authorization denied", map[string]interface{}{
-			"principal": principal,
-			"fqdn":      hostFQDN,
-			"reason":    reason,
+			"principal":   principal,
+			"fqdn":        hostFQDN,
+			"reason":      result.Message,
+			"deny_reason": string(result.DenyReason),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        reason,
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - MAC policy violation",
-		}, nil
+		return auth.NewDeniedAuthResponse(403, result.DenyReason, result.Message), nil
 	}
 
 	a.logger.Info(ctx, "Host-level MAC authorization granted", map[string]interface{}{
 		"principal": principal,
 		"fqdn":      hostFQDN,
-		"reason":    reason,
+		"reason":    result.Message,
 	})
 
 	// Perform URI-level MAC authorization check against all matching rules.
@@ -162,12 +159,11 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 			"path":  req.HTTPPath,
 			"error": err.Error(),
 		})
-		return &auth.AuthResponse{
-			Decision:      auth.DecisionDeny,
-			Reason:        fmt.Sprintf("Failed to retrieve URI security context: %s", err.Error()),
-			DeniedStatus:  403,
-			DeniedMessage: "Forbidden - MAC context unavailable",
-		}, nil
+		return auth.NewDeniedAuthResponse(
+			403,
+			auth.DenyReasonURIContext,
+			fmt.Sprintf("Failed to retrieve URI security context: %s", err.Error()),
+		), nil
 	}
 
 	// Check URI-level MAC authorization if any rules matched
@@ -190,21 +186,21 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 				"integrity_cats": fmt.Sprintf("0x%x", uriSecCtx.IntegrityCategories),
 			})
 
-			allowed, reason := checkAccessHTTP(userSecCtx, uriSecCtx)
-			if !allowed {
+			uriResult := checkAccessHTTP(userSecCtx, uriSecCtx,
+				auth.DenyReasonURIConfidentiality,
+				auth.DenyReasonURICategories,
+				auth.DenyReasonURIIntegrity,
+			)
+			if !uriResult.Allowed {
 				a.logger.Warn(ctx, "URI-level MAC authorization denied", map[string]interface{}{
-					"principal": principal,
-					"fqdn":      hostFQDN,
-					"path":      req.HTTPPath,
-					"rule_path": uriSecCtx.Path,
-					"reason":    reason,
+					"principal":   principal,
+					"fqdn":        hostFQDN,
+					"path":        req.HTTPPath,
+					"rule_path":   uriSecCtx.Path,
+					"reason":      uriResult.Message,
+					"deny_reason": string(uriResult.DenyReason),
 				})
-				return &auth.AuthResponse{
-					Decision:      auth.DecisionDeny,
-					Reason:        reason,
-					DeniedStatus:  403,
-					DeniedMessage: "Forbidden - MAC policy violation",
-				}, nil
+				return auth.NewDeniedAuthResponse(403, uriResult.DenyReason, uriResult.Message), nil
 			}
 		}
 
@@ -213,7 +209,7 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 			"fqdn":        hostFQDN,
 			"path":        req.HTTPPath,
 			"rules_count": len(uriSecCtxs),
-			"reason":      reason,
+			"reason":      result.Message,
 		})
 	} else {
 		a.logger.Debug(ctx, "No URI MAC rules found for path, skipping URI-level check", map[string]interface{}{
@@ -230,15 +226,14 @@ func (a *HTTPAuthorizer) Authorize(ctx context.Context, req *auth.AuthRequest) (
 }
 
 func (a *HTTPAuthorizer) createUnauthorizedResponse() *auth.AuthResponse {
-	return &auth.AuthResponse{
-		Decision:      auth.DecisionDeny,
-		Reason:        "Kerberos authentication required",
-		DeniedStatus:  401,
-		DeniedMessage: "Unauthorized",
-		Headers: map[string]string{
+	return auth.NewDeniedAuthResponseWithHeaders(
+		401,
+		auth.DenyReasonAuthentication,
+		"Kerberos authentication required",
+		map[string]string{
 			"WWW-Authenticate": "Negotiate",
 		},
-	}
+	)
 }
 
 func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, userTicket *credentials.Credentials, httpMethod string) (*auth.UserHTTPSecurityContext, error) {
@@ -273,7 +268,7 @@ func GetUserHTTPSecurityContext(ctx context.Context, cl *ldap.Client, userTicket
 
 		integrityValue = userEntry.GetAttributeValue(auth.UserIntegrityLevelAttribute)
 		if integrityValue == "" {
-			cl.Logger.Warn(ctx, fmt.Sprintf("user integrity categories attribute '%s' is empty or not found, setting default", auth.UserIntegrityLevelAttribute),  map[string]interface{}{})
+			cl.Logger.Warn(ctx, fmt.Sprintf("user integrity categories attribute '%s' is empty or not found, setting default", auth.UserIntegrityLevelAttribute), map[string]interface{}{})
 			integrityValue = defaultIntegrityValue
 		}
 	}
@@ -420,13 +415,16 @@ var writeHTTPMethods = map[string]struct{}{
 
 // checkAccessHTTP performs Mandatory Access Control (MAC) authorization check.
 // Based on Bell-LaPadula model: "no read up, no write down".
-func checkAccessHTTP(userCtx *auth.UserHTTPSecurityContext, resourceCtx auth.SecurityContext) (bool, string) {
+// The caller provides the deny reasons to use for confidentiality, categories,
+// and integrity violations so that host-level and URI-level checks produce
+// distinct DenyReason values.
+func checkAccessHTTP(userCtx *auth.UserHTTPSecurityContext, resourceCtx auth.SecurityContext, confDenyReason, catsDenyReason, integrityDenyReason auth.DenyReason) MACCheckResult {
 	_, isWriteOperation := writeHTTPMethods[userCtx.RequestMethod]
-	accessGranted, msg := checkMACAccess(userCtx, resourceCtx, isWriteOperation)
-	if accessGranted && isWriteOperation {
-		accessGranted, msg = checkIntegrity(userCtx, resourceCtx)
+	result := checkMACAccess(userCtx, resourceCtx, isWriteOperation, confDenyReason, catsDenyReason)
+	if result.Allowed && isWriteOperation {
+		result = checkIntegrity(userCtx, resourceCtx, integrityDenyReason)
 	}
-	return accessGranted, msg
+	return result
 }
 
 // extractHostFromRequest extracts the FQDN from the authorization request.
