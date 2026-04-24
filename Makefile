@@ -2,7 +2,7 @@
 
 # Variables
 APP_NAME=authserver
-VERSION=v0.0.2
+VERSION=v0.0.3
 BINARY_NAME=authserver
 DOCKER_IMAGE=mac-authserver
 DOCKER_COMPOSE=docker compose

@@ -79,6 +79,28 @@ func (s *Store) refreshLoop(ctx context.Context) {
 	}
 }
 
+// ForceRefresh triggers an immediate reload of the cache from LDAP.
+// It blocks until the reload is complete and returns an error if the load fails.
+// On failure the existing (stale) snapshot is preserved.
+func (s *Store) ForceRefresh(ctx context.Context) error {
+	s.log.Info(ctx, "cache: force refresh requested", nil)
+
+	snap, err := loadSnapshot(ctx, s.ldapClient, s.log)
+	if err != nil {
+		s.log.Error(ctx, "cache: force refresh failed, keeping stale data", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return err
+	}
+
+	atomic.StorePointer(&s.snap, unsafe.Pointer(snap))
+	s.log.Info(ctx, "cache: force refresh complete", map[string]interface{}{
+		"uri_rules": len(snap.allRules),
+		"users":     len(snap.users),
+	})
+	return nil
+}
+
 // current returns the current snapshot. Never nil after NewStore succeeds.
 func (s *Store) current() *snapshot {
 	return (*snapshot)(atomic.LoadPointer(&s.snap))

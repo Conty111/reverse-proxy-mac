@@ -95,6 +95,9 @@ func run(ctx context.Context) error {
 	httpServer.RegisterHealthChecker("grpc", &grpcHealthChecker{grpcServer: grpcServer})
 	httpServer.RegisterHealthChecker("ldap", &ldapHealthChecker{ldapClient: ldapClient})
 
+	// Register cache refresher for the /cache/refresh endpoint
+	httpServer.RegisterCacheRefresher(macCache)
+
 	if err := httpServer.Start(ctx); err != nil {
 		log.Error(ctx, "Failed to start HTTP server", map[string]interface{}{"error": err.Error()})
 		return err

@@ -26,6 +26,11 @@ type HealthChecker interface {
 	IsHealthy(ctx context.Context) bool
 }
 
+// CacheRefresher is an interface for components that support force-refreshing their cache.
+type CacheRefresher interface {
+	ForceRefresh(ctx context.Context) error
+}
+
 // HTTPServer provides HTTP endpoints for health checks and Prometheus metrics.
 type HTTPServer struct {
 	server         *http.Server
@@ -33,6 +38,7 @@ type HTTPServer struct {
 	host           string
 	port           int
 	healthCheckers map[string]HealthChecker
+	cacheRefresher CacheRefresher
 	mu             sync.RWMutex
 	running        bool
 }
@@ -45,6 +51,13 @@ func NewHTTPServer(host string, port int, log logger.Logger) *HTTPServer {
 		logger:         log,
 		healthCheckers: make(map[string]HealthChecker),
 	}
+}
+
+// RegisterCacheRefresher registers a cache refresher for the /cache/refresh endpoint.
+func (s *HTTPServer) RegisterCacheRefresher(refresher CacheRefresher) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cacheRefresher = refresher
 }
 
 // RegisterHealthChecker registers a named health checker component.
@@ -69,6 +82,7 @@ func (s *HTTPServer) Start(ctx context.Context) error {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/health/live", s.handleLiveness)
 	mux.HandleFunc("/health/ready", s.handleReadiness)
+	mux.HandleFunc("/cache/refresh", s.handleCacheRefresh)
 	mux.Handle("/metrics", promhttp.InstrumentMetricHandler(
 		prometheus.DefaultRegisterer,
 		promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
@@ -236,4 +250,61 @@ func (s *HTTPServer) handleReadiness(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		s.logger.Error(ctx, "Failed to encode readiness response", map[string]interface{}{"error": err.Error()})
 	}
+}
+
+// CacheRefreshResponse represents the response for the cache refresh endpoint.
+type CacheRefreshResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+// handleCacheRefresh handles the POST /cache/refresh endpoint — triggers an
+// immediate reload of the in-memory cache from LDAP.
+func (s *HTTPServer) handleCacheRefresh(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(w).Encode(CacheRefreshResponse{
+			Status:  "error",
+			Message: "only POST method is allowed",
+		})
+		return
+	}
+
+	s.mu.RLock()
+	refresher := s.cacheRefresher
+	s.mu.RUnlock()
+
+	if refresher == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(CacheRefreshResponse{
+			Status:  "error",
+			Message: "cache refresher is not registered",
+		})
+		return
+	}
+
+	s.logger.Info(ctx, "Cache force refresh triggered via HTTP endpoint", nil)
+
+	if err := refresher.ForceRefresh(ctx); err != nil {
+		s.logger.Error(ctx, "Cache force refresh failed", map[string]interface{}{"error": err.Error()})
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(CacheRefreshResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("cache refresh failed: %s", err.Error()),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(CacheRefreshResponse{
+		Status:  "ok",
+		Message: "cache refreshed successfully",
+	})
 }
